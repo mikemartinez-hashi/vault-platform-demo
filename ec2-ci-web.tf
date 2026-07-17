@@ -1,9 +1,5 @@
 # ===========================================================================
 # ACT 3 (infra) — the CI-injected web server
-# A small Ubuntu/Apache instance whose page is rendered from values the GitHub
-# Actions pipeline injected at apply time: the static KV secret and the dynamic
-# PKI cert metadata (issued in-pipeline). Locally (github_* = "local") it shows
-# placeholder values; through the workflow it shows the real run + secret.
 # ===========================================================================
 
 data "aws_ami" "ubuntu_2404" {
