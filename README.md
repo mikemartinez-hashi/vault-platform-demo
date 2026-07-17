@@ -133,5 +133,4 @@ described. Verification steps are in `DEMO-RUNBOOK.md`.
 terraform destroy   # tears down RDS, both EC2 instances, and all Vault config
 ```
 
-Destroy after the demo — RDS + the Windows box are public by design and shouldn't
-linger.
+Destroy after the demo
