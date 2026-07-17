@@ -37,18 +37,24 @@ output "ci_web_url" {
   value       = "http://${aws_instance.ci_web.public_dns}"
 }
 
-output "github_repo_secrets" {
-  description = "Paste these into GitHub repo SECRETS for the Actions workflow."
-  value = {
-    VAULT_ROLE_ID   = vault_approle_auth_backend_role.ci.role_id
-    VAULT_SECRET_ID = "(sensitive — see 'terraform output -raw ci_secret_id')"
-  }
+# AppRole credentials for the GitHub Actions workflow (repo secrets
+# VAULT_ROLE_ID / VAULT_SECRET_ID).
+#
+# DEMO CONVENIENCE: both are exposed in plaintext so they render in the HCP
+# Terraform UI without the "sensitive" mask. secret_id is a real credential and
+# is provider-marked sensitive, so nonsensitive() is required to un-mask it —
+# this ALSO stores it readable in state and visible to anyone with workspace
+# read access. Fine for a throwaway demo AppRole; do NOT do this for real creds.
+# To re-hide it, delete ci_secret_id (or drop nonsensitive() and add
+# `sensitive = true`) and read it with `terraform output -raw ci_secret_id`.
+output "ci_role_id" {
+  description = "GitHub Actions AppRole Role ID (repo secret VAULT_ROLE_ID)."
+  value       = vault_approle_auth_backend_role.ci.role_id
 }
 
 output "ci_secret_id" {
-  description = "GitHub Actions AppRole Secret ID (repo secret VAULT_SECRET_ID)."
-  value       = vault_approle_auth_backend_role_secret_id.ci.secret_id
-  sensitive   = true
+  description = "GitHub Actions AppRole Secret ID (repo secret VAULT_SECRET_ID). Un-masked for demo visibility."
+  value       = nonsensitive(vault_approle_auth_backend_role_secret_id.ci.secret_id)
 }
 
 output "github_repo_variables" {

@@ -97,9 +97,10 @@ URLs and the Vault Agent config, not for authentication.
 
 ### Wiring up Act 3 (GitHub Actions)
 
-After the first apply, `terraform output github_repo_secrets`,
-`terraform output -raw ci_secret_id`, and `terraform output github_repo_variables`
-print the exact values to paste into your GitHub repo:
+After the first apply, `terraform output ci_role_id`, `terraform output ci_secret_id`,
+and `terraform output github_repo_variables` print the exact values to paste into
+your GitHub repo (the AppRole outputs are un-masked so they also show in the HCP
+Terraform UI — see the note in `outputs.tf`):
 
 - **Repo secrets:** `VAULT_ROLE_ID`, `VAULT_SECRET_ID`, `TF_API_TOKEN`
 - **Repo variables:** `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_APPROLE_PATH`,

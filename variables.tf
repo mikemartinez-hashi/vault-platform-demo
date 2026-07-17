@@ -171,7 +171,7 @@ variable "vault_ci_secret" {
   description = "Static KV secret value retrieved by GitHub Actions and injected into the CI web server (overrides the applied value at pipeline time)."
   type        = string
   # sensitive   = true
-  default     = "local-dev-secret-value"
+  default = "local-dev-secret-value"
 }
 
 variable "vault_ci_cert_common_name" {
