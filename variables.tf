@@ -46,7 +46,7 @@ variable "owner" {
 
 # =============================================================================
 # Vault connection (NOT auth — auth comes from VAULT_TOKEN env var).
-# Used to build PKI URLs and bake the Vault Agent config.
+# For Vault Agent
 # =============================================================================
 variable "vault_addr" {
   description = "HCP Vault cluster address, e.g. https://<cluster>.hashicorp.cloud:8200"
