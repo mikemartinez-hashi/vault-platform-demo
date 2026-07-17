@@ -1,0 +1,18 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Local variable / secret files
+terraform.tfvars
+*.auto.tfvars
+.vault-outputs.env
+
+# Activated backend (keep only backend.tf.example in VCS)
+backend.tf
+
+# OS cruft
+.DS_Store

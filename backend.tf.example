@@ -1,0 +1,21 @@
+# Activate this ONLY for the GitHub Actions / CLI-driven path (Act 3), where the
+# runner shells out to `terraform` and needs to reach your HCP Terraform
+# workspace:  cp backend.tf.example backend.tf  and edit org/workspace.
+#
+# If instead you connect an HCP Terraform workspace directly to this folder
+# (VCS-driven), leave this OFF — HCP Terraform injects the backend for you.
+#
+# Alternative to editing this file: set env vars on the runner/shell
+#   TF_CLOUD_ORGANIZATION=<your-org>
+#   TF_WORKSPACE=vault-platform-demo
+# with an empty `cloud {}` block present.
+
+terraform {
+  cloud {
+    organization = "Mikes_sandbox"
+
+    workspaces {
+      name = "vault-platform-demo"
+    }
+  }
+}

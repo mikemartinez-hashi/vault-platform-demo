@@ -1,0 +1,40 @@
+# Copy to terraform.tfvars (local) or set as HCP Terraform workspace variables.
+# Mark demo_password / sample_api_key / ci_kv_secret_value / mysql_root_password
+# as sensitive.
+#
+# Provider creds go in as ENVIRONMENT variables on the workspace, not here:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY    (or a dynamic provider credential)
+#   VAULT_ADDR, VAULT_TOKEN, VAULT_NAMESPACE    (VAULT_NAMESPACE usually "admin")
+
+# --- The one knob that re-skins the whole demo ---
+customer_name = "demo"          # e.g. "advent", "fadv" — prefixes all mounts/roles
+
+# --- AWS ---
+aws_region = "us-east-1"
+key_name   = "linux-demo-kp"    # an existing EC2 key pair in this region
+
+# --- Vault (connection only; auth is via VAULT_TOKEN env var) ---
+vault_addr      = "https://<your-cluster>.hashicorp.cloud:8200"
+vault_namespace = "admin"
+vault_version   = "1.21.3"       # MUST match your HCP Vault server version (Act 4 agent)
+
+# --- Act 2: RDS reachability ---
+# REQUIRED. Include your HCP Vault cluster egress IP (HCP portal > your Vault
+# cluster) AND your own public IP, each as /32. Demo-only — never leave 0.0.0.0/0.
+db_allowed_cidrs = [
+  # "<HCP_VAULT_EGRESS_IP>/32",
+  # "<YOUR_PUBLIC_IP>/32",
+]
+
+# --- Act 1: KV demo login ---
+demo_username = "appuser"
+# demo_password = "..."         # throwaway value for the live demo login
+
+# Short TTL = a live "watch it expire" moment; longer = revoke live instead.
+db_cred_ttl_seconds     = 3600
+db_cred_max_ttl_seconds = 86400
+
+# --- Act 4: PKI + Vault Agent (Windows MariaDB) ---
+pki_common_name = "mysql.demo.internal"
+server_cert_ttl = "72h"          # short = visible rotation on renewal
+# mysql_root_password = "..."     # throwaway MariaDB root password

@@ -1,0 +1,96 @@
+name: "Terraform Apply (Main)"
+
+# On merge to main: pull the static KV secret + issue a fresh dynamic PKI cert
+# from Vault, then apply — HCP Terraform bakes both into the CI web server.
+#
+# Requires the same repo SECRETS + VARIABLES as terraform-plan.yml, and an
+# active backend.tf (cloud block) or TF_CLOUD_ORGANIZATION/TF_WORKSPACE env.
+
+on:
+  push:
+    branches: [main]
+    paths: ["**.tf", "**.tfvars", "templates/**"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform-apply:
+    name: "Plan and Apply"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Retrieve Static Vault Secret (KV)
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ vars.VAULT_ADDR }}
+          namespace: ${{ vars.VAULT_NAMESPACE }}
+          method: approle
+          path: ${{ vars.VAULT_APPROLE_PATH }}
+          roleId: ${{ secrets.VAULT_ROLE_ID }}
+          secretId: ${{ secrets.VAULT_SECRET_ID }}
+          exportToken: true
+          secrets: |
+            ${{ vars.VAULT_KV_PATH }} ${{ vars.VAULT_KV_KEY }} | VAULT_SECRET ;
+
+      - name: Issue Dynamic PKI Certificate
+        id: dynamic
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_NAMESPACE: ${{ vars.VAULT_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          common_name="gha-runner.ci.demo.internal"
+          http=$(curl -s -o /tmp/vault_resp.json -w '%{http_code}' \
+            -X POST \
+            -H "X-Vault-Token: ${VAULT_TOKEN}" \
+            -H "X-Vault-Namespace: ${VAULT_NAMESPACE}" \
+            -H "Content-Type: application/json" \
+            -d "{\"common_name\":\"${common_name}\",\"ttl\":\"15m\"}" \
+            "${VAULT_ADDR}/v1/${{ vars.VAULT_PKI_ISSUE_PATH }}")
+          if [ "$http" != "200" ]; then
+            echo "::error::Vault returned HTTP $http issuing ${{ vars.VAULT_PKI_ISSUE_PATH }}"
+            cat /tmp/vault_resp.json; echo
+            exit 1
+          fi
+          resp=$(cat /tmp/vault_resp.json)
+          private_key=$(echo "$resp" | jq -r '.data.private_key')
+          serial=$(echo "$resp"      | jq -r '.data.serial_number')
+          expiration=$(echo "$resp"  | jq -r '.data.expiration')
+          expires_utc=$(date -u -d "@${expiration}" '+%Y-%m-%d %H:%M:%S UTC')
+          echo "::add-mask::$private_key"
+          echo "Vault issued dynamic cert — serial=$serial expires=$expires_utc"
+          {
+            echo "common_name=${common_name}"
+            echo "serial=${serial}"
+            echo "expiration=${expires_utc}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      # In HCP Terraform remote mode, `apply` triggers a single plan+apply run.
+      # Do NOT add a separate `terraform plan` step (it would queue a second run).
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="github_run_id=$GITHUB_RUN_ID" \
+            -var="github_sha=$GITHUB_SHA" \
+            -var="github_actor=$GITHUB_ACTOR" \
+            -var="vault_ci_secret=${{ steps.vault.outputs.VAULT_SECRET }}" \
+            -var="vault_ci_cert_common_name=${{ steps.dynamic.outputs.common_name }}" \
+            -var="vault_ci_cert_serial=${{ steps.dynamic.outputs.serial }}" \
+            -var="vault_ci_cert_expiration=${{ steps.dynamic.outputs.expiration }}"
