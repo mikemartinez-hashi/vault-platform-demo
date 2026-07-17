@@ -72,7 +72,7 @@ variable "sample_api_key" {
   description = "Demo-only sample secret value stored in KV. Never pass real secrets via Terraform in production."
   type        = string
   default     = "demo-not-a-real-key-1234"
-  sensitive   = true
+  # sensitive   = true
 }
 
 variable "demo_username" {
@@ -85,7 +85,7 @@ variable "demo_password" {
   description = "Password for the live demo login. Set a throwaway value."
   type        = string
   default     = "SecurePass123!"
-  sensitive   = true
+  # sensitive   = true
 }
 
 # =============================================================================
@@ -138,7 +138,7 @@ variable "ci_kv_secret_value" {
   description = "Static secret value the GitHub Actions pipeline reads from KV and injects into the CI web server."
   type        = string
   default     = "ci-injected-not-a-real-key-5678"
-  sensitive   = true
+  # sensitive   = true
 }
 
 variable "ci_web_instance_type" {
@@ -170,7 +170,7 @@ variable "github_actor" {
 variable "vault_ci_secret" {
   description = "Static KV secret value retrieved by GitHub Actions and injected into the CI web server (overrides the applied value at pipeline time)."
   type        = string
-  sensitive   = true
+  # sensitive   = true
   default     = "local-dev-secret-value"
 }
 
@@ -223,7 +223,7 @@ variable "mysql_root_password" {
   description = "Root password for MariaDB on the Windows instance (demo-only, throwaway)."
   type        = string
   default     = "DemoRootPass123!"
-  sensitive   = true
+  # sensitive   = true
 }
 
 variable "mariadb_msi_url" {
