@@ -1,15 +1,6 @@
 # ===========================================================================
 # ACT 4 (infra) — PKI + Vault Agent on Windows MariaDB
 #
-# The Vault Agent story, told the way the customer asked: MariaDB/MySQL on
-# Windows stores its TLS cert + key as PLAIN FILES. Vault Agent authenticates
-# with AppRole, renders cert.pem / key.pem / chain.pem to disk at start-up, and
-# renews them in place on the lease's schedule. On each renewal it fires an
-# exec hook that runs `FLUSH SSL;` — MariaDB reloads TLS live, no restart, no
-# downtime. Same mechanism works on MySQL 8 with `ALTER INSTANCE RELOAD TLS;`.
-#
-# role_id / secret_id are wired straight into the instance by Terraform — no
-# manual copying of AppRole credentials.
 # ===========================================================================
 
 data "aws_ami" "windows_2025" {
