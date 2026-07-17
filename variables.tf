@@ -9,7 +9,7 @@ variable "customer_name" {
     Lowercase alphanumeric + dashes only.
   EOT
   type        = string
-  default     = "demo"
+  # default     = "demo"
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.customer_name))
@@ -23,7 +23,7 @@ variable "customer_name" {
 variable "aws_region" {
   description = "AWS region for all demo infrastructure."
   type        = string
-  default     = "us-east-1"
+  # default     = "us-east-1"
 }
 
 variable "key_name" {
@@ -62,7 +62,7 @@ variable "vault_namespace" {
 variable "vault_version" {
   description = "Vault Agent version installed on the Windows MariaDB instance. Must match your HCP Vault server version (e.g. 1.21.3)."
   type        = string
-  default     = "1.21.3"
+  default     = "2.0.3"
 }
 
 # =============================================================================
