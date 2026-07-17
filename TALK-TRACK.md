@@ -214,14 +214,21 @@ pipeline gets a secret without ever storing one."
 1. On the **`github-actions-${CUSTOMER}`** AppRole page, show the **Role ID**, and
    click **Generate SecretID**. "These are what we hand the pipeline, as GitHub
    repo secrets. Terraform even printed them for us to paste."
-2. Switch to the **GitHub repo**. Open a pull request with a trivial change. Watch
-   the **plan** workflow run, then show the **PR comment**: the plan plus the note
-   that it pulled the KV secret and issued a certificate. "The pipeline
-   authenticated to Vault, pulled exactly what it needed, and it is all auditable."
-3. Merge the PR. The **apply** workflow pulls a fresh secret and cert, then applies.
-4. Open the result: `terraform output ci_web_url`. The page shows the injected KV
-   value, the dynamic certificate's serial and expiry, and the exact GitHub run.
-   Re-run the pipeline and the serial changes every time.
+2. Switch to the **GitHub repo → Actions**. Run **Vault Secret Injection** (open a
+   PR, or click **Run workflow**). Open the run and show the **Summary**: the
+   pipeline authenticated with AppRole, pulled the KV secret (value masked), and
+   issued a fresh PKI certificate with its serial and expiry. On a PR, the same
+   proof posts as a **PR comment**. "The pipeline authenticated to Vault, pulled
+   exactly what it needed, held no long-lived secret, and it is all auditable."
+3. Run it again. "The certificate serial and expiry change every time. Each one is
+   short-lived and expires on its own. Nothing is stored in the repo or the runner."
+4. (Optional) Show the deployed **`ci_web`** page from your apply
+   (`terraform output ci_web_url`) as the rendered end state: the injected KV value
+   and certificate metadata on a real web server.
+
+> The pipeline proves the live Vault pull in CI; it does not re-deploy
+> infrastructure. That keeps the demo fast and the story tight: secrets flow into
+> the pipeline from Vault, on demand.
 
 ### Do it in the CLI
 

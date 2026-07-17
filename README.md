@@ -48,12 +48,13 @@ templates/
   vault-agent/agent-windows.hcl.tpl Vault Agent config (templates + FLUSH SSL hook)
 
 .github/workflows/
-  terraform-plan.yml      PR → speculative plan + KV/PKI pull, posts PR comment
-  terraform-apply.yml     merge → apply, injects fresh KV secret + PKI cert
+  vault-inject-pr.yml     PR/dispatch → AppRole login, pull KV secret + issue PKI cert, PR comment + run summary
+  vault-inject-main.yml   merge/dispatch → same, renders proof to the run summary (no Terraform, no infra changes)
 
-backend.tf.example        cloud{} block — activate ONLY for the GitHub Actions path
+backend.tf.example        cloud{} block — only if you want CLI-driven remote applies (not used by the pipeline)
 terraform.tfvars.example
 DEMO-RUNBOOK.md           the act-by-act live script
+TALK-TRACK.md             full UI + CLI talk track
 ```
 
 ## Prerequisites / what you provide
@@ -97,19 +98,23 @@ URLs and the Vault Agent config, not for authentication.
 
 ### Wiring up Act 3 (GitHub Actions)
 
-After the first apply, `terraform output ci_role_id`, `terraform output ci_secret_id`,
-and `terraform output github_repo_variables` print the exact values to paste into
-your GitHub repo (the AppRole outputs are un-masked so they also show in the HCP
-Terraform UI — see the note in `outputs.tf`):
+The workflows authenticate to Vault with AppRole, pull the KV secret, and issue a
+PKI cert. They do **not** run Terraform or touch infrastructure, so the only setup
+is pasting Vault values into the GitHub repo. After the first apply,
+`terraform output ci_role_id`, `terraform output ci_secret_id`, and
+`terraform output github_repo_variables` print the exact values (the AppRole
+outputs are un-masked so they also show in the HCP Terraform UI — see the note in
+`outputs.tf`):
 
-- **Repo secrets:** `VAULT_ROLE_ID`, `VAULT_SECRET_ID`, `TF_API_TOKEN`
+- **Repo secrets:** `VAULT_ROLE_ID`, `VAULT_SECRET_ID`
 - **Repo variables:** `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_APPROLE_PATH`,
   `VAULT_KV_PATH`, `VAULT_KV_KEY`, `VAULT_PKI_ISSUE_PATH`
 
 The workflow YAML reads the paths from repo **variables**, so it stays
-customer-agnostic — no edits when you change `customer_name`. For the runner to
-reach HCP Terraform, `cp backend.tf.example backend.tf` (edit org/workspace) or
-set `TF_CLOUD_ORGANIZATION` / `TF_WORKSPACE`.
+customer-agnostic — no edits when you change `customer_name`. Trigger it by
+opening a PR, merging to `main`, or **Run workflow** (workflow_dispatch) from the
+Actions tab. The `ci_web` page is deployed by your `terraform apply`; the pipeline
+proves the live Vault pull in its run summary and PR comment.
 
 ## Act 4 — how the Windows MariaDB / Vault Agent piece works
 

@@ -11,7 +11,9 @@ terraform.tfvars
 *.auto.tfvars
 .vault-outputs.env
 
-# Activated backend (keep only backend.tf.example in VCS)
+# Local-only HCP Terraform backend (if you ever cp backend.tf.example -> backend.tf
+# for a CLI-driven remote workspace). The GitHub Actions workflows no longer run
+# Terraform, so this is not needed for the pipeline.
 backend.tf
 
 # OS cruft

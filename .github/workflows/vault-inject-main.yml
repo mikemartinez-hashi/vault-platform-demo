@@ -1,0 +1,105 @@
+name: "Vault Secret Injection (main)"
+
+# Same as the PR workflow, on merge to main (or manual dispatch). Authenticates
+# to HCP Vault with AppRole, pulls the static KV secret, and issues a fresh
+# short-lived PKI certificate. No Terraform, no infrastructure changes — it
+# proves fresh secrets flow into CI from Vault on every run. Result renders in
+# the run Summary.
+#
+# Requires (from `terraform output`, set on the GitHub repo):
+#   Repo SECRETS:   VAULT_ROLE_ID, VAULT_SECRET_ID
+#   Repo VARIABLES: VAULT_ADDR, VAULT_NAMESPACE, VAULT_APPROLE_PATH,
+#                   VAULT_KV_PATH, VAULT_KV_KEY, VAULT_PKI_ISSUE_PATH
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vault-inject:
+    name: "Pull KV + issue PKI cert from Vault"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve static KV secret (AppRole)
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ vars.VAULT_ADDR }}
+          namespace: ${{ vars.VAULT_NAMESPACE }}
+          method: approle
+          path: ${{ vars.VAULT_APPROLE_PATH }}
+          roleId: ${{ secrets.VAULT_ROLE_ID }}
+          secretId: ${{ secrets.VAULT_SECRET_ID }}
+          exportToken: true
+          secrets: |
+            ${{ vars.VAULT_KV_PATH }} ${{ vars.VAULT_KV_KEY }} | VAULT_SECRET ;
+
+      - name: Issue dynamic PKI certificate
+        id: dynamic
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_NAMESPACE: ${{ vars.VAULT_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          common_name="gha-runner.ci.demo.internal"
+          http=$(curl -s -o /tmp/vault_resp.json -w '%{http_code}' \
+            -X POST \
+            -H "X-Vault-Token: ${VAULT_TOKEN}" \
+            -H "X-Vault-Namespace: ${VAULT_NAMESPACE}" \
+            -H "Content-Type: application/json" \
+            -d "{\"common_name\":\"${common_name}\",\"ttl\":\"15m\"}" \
+            "${VAULT_ADDR}/v1/${{ vars.VAULT_PKI_ISSUE_PATH }}")
+          if [ "$http" != "200" ]; then
+            echo "::error::Vault returned HTTP $http issuing ${{ vars.VAULT_PKI_ISSUE_PATH }}"
+            cat /tmp/vault_resp.json; echo
+            exit 1
+          fi
+          resp=$(cat /tmp/vault_resp.json)
+          private_key=$(echo "$resp" | jq -r '.data.private_key')
+          serial=$(echo "$resp"      | jq -r '.data.serial_number')
+          expiration=$(echo "$resp"  | jq -r '.data.expiration')
+          expires_utc=$(date -u -d "@${expiration}" '+%Y-%m-%d %H:%M:%S UTC')
+          echo "::add-mask::$private_key"
+          echo "Vault issued dynamic cert — serial=$serial expires=$expires_utc"
+          {
+            echo "common_name=${common_name}"
+            echo "serial=${serial}"
+            echo "expiration=${expires_utc}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Render proof to run summary
+        env:
+          VAULT_SECRET: ${{ steps.vault.outputs.VAULT_SECRET }}
+          CN: ${{ steps.dynamic.outputs.common_name }}
+          SERIAL: ${{ steps.dynamic.outputs.serial }}
+          EXPIRES: ${{ steps.dynamic.outputs.expiration }}
+          KV_PATH: ${{ vars.VAULT_KV_PATH }}
+          KV_KEY: ${{ vars.VAULT_KV_KEY }}
+        run: |
+          secret_len=${#VAULT_SECRET}
+          {
+            echo "## 🔐 HCP Vault secret injection"
+            echo ""
+            echo "The pipeline authenticated with **AppRole** — no long-lived secret stored in GitHub — and pulled exactly what it needed."
+            echo ""
+            echo "### Static KV secret"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Path | \`${KV_PATH}\` |"
+            echo "| Key | \`${KV_KEY}\` |"
+            echo "| Retrieved | ✅ yes — value masked by GitHub Actions (${secret_len} chars) |"
+            echo ""
+            echo "### Dynamic PKI certificate (issued at run time)"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Common Name | \`${CN}\` |"
+            echo "| Serial | \`${SERIAL}\` |"
+            echo "| Expires | ${EXPIRES} |"
+            echo "| Private key | 🔒 masked — never leaves the runner |"
+            echo ""
+            echo "_Re-run this pipeline and the serial + expiry change every time. Each cert is short-lived and expires on its own._"
+          } >> "$GITHUB_STEP_SUMMARY"
