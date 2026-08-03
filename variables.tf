@@ -51,6 +51,7 @@ variable "owner" {
 variable "vault_addr" {
   description = "HCP Vault cluster address, e.g. https://<cluster>.hashicorp.cloud:8200"
   type        = string
+  default     = "https://vault-demo-cluster-public-vault-b71960ee.491753e4.z1.hashicorp.cloud:8200"
 }
 
 variable "vault_namespace" {
