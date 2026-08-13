@@ -18,3 +18,4 @@ backend.tf
 
 # OS cruft
 .DS_Store
+*.pdf
