@@ -121,9 +121,9 @@ variable "db_master_username" {
 }
 
 variable "db_cred_ttl_seconds" {
-  description = "Default TTL for dynamic DB creds. Short (e.g. 300) makes lease expiry demoable; 3600 is safer if the demo runs long (revoke live instead)."
+  description = "Default TTL for dynamic DB creds. 300 (5m) makes lease expiry demoable live and keeps teardown clean; raise to 3600 only if the demo runs long, and revoke live instead."
   type        = number
-  default     = 3600
+  default     = 300
 }
 
 variable "db_cred_max_ttl_seconds" {

@@ -141,6 +141,52 @@ your CA isn't in the per-cert path, and no server ever holds a long-lived cert."
 
 ---
 
+## Teardown
+
+**`terraform destroy` on its own will fail if any dynamic DB lease is still
+live.** Terraform destroys the connection (`<customer>-postgres`) before the
+mount, but deleting the mount is what triggers lease revocation — so Vault tries
+to run `DROP ROLE` through a connection Terraform already removed:
+
+```
+Code: 400. Errors:
+* failed to revoke "database_<customer>/creds/<customer>-role/..." :
+  failed to find entry for connection with name: "<customer>-postgres"
+```
+
+Revoke first, then destroy:
+
+1. **Force-revoke every lease under the DB mount.** `-force` drops the leases
+   from Vault's storage without calling Postgres — correct here, since the RDS
+   instance is being destroyed in the same run anyway:
+   ```bash
+   vault lease revoke -force -prefix database_<customer>/
+   ```
+
+2. **Destroy:**
+   ```bash
+   terraform destroy
+   ```
+
+3. **Confirm nothing is left behind** — should return no mounts for this customer:
+   ```bash
+   vault secrets list | grep <customer>
+   ```
+
+**If a destroy already failed and left the mount orphaned:** run step 1, then
+re-run `terraform destroy`. Don't `vault secrets disable` by hand — it deletes
+the mount out of band, leaves Terraform state inconsistent, and you'll be doing
+`terraform state rm` afterward.
+
+**Note:** `-force` needs `sudo` capability on `sys/leases/revoke-force/*`. A 403
+here (rather than a 400) means the token lacks it — use an admin token.
+
+With `db_cred_ttl_seconds = 300` most leases expire on their own before teardown,
+but a credential issued in the last five minutes still holds a live lease. Run
+step 1 every time — it's a no-op when there's nothing to revoke.
+
+---
+
 ## Deliberately NOT in this demo (say so if asked)
 
 - **Namespaces, DR/Performance Replication, Transit, Radar** — POC / deep-dive.
@@ -155,4 +201,6 @@ your CA isn't in the per-cert path, and no server ever holds a long-lived cert."
   cause: `vault_version` doesn't match the HCP Vault server, or AppRole policy.
 - **GitHub Actions plan empty** → check repo secrets/variables and that
   `backend.tf` (or `TF_CLOUD_*`) points at the right workspace.
+- **`terraform destroy` fails with `failed to find entry for connection`** → a
+  dynamic DB lease is still live. See [Teardown](#teardown).
 - Always have a **screenshot/GIF fallback** of Acts 2 and 4 in your back pocket.

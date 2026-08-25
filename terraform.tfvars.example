@@ -31,7 +31,8 @@ demo_username = "appuser"
 # demo_password = "..."         # throwaway value for the live demo login
 
 # Short TTL = a live "watch it expire" moment; longer = revoke live instead.
-db_cred_ttl_seconds     = 3600
+# 300 = 5 min: long enough to demo, short enough that leases are gone by teardown.
+db_cred_ttl_seconds     = 300
 db_cred_max_ttl_seconds = 86400
 
 # --- Act 4: PKI + Vault Agent (Windows MariaDB) ---
