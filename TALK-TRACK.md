@@ -18,26 +18,26 @@ Set this once in your shell so every command below is copy-paste ready. Use the
 same value you set for `customer_name` in Terraform.
 
 ```bash
-export CUSTOMER="acme"          # <-- match your terraform customer_name
-export VAULT_ADDR="https://<cluster>.hashicorp.cloud:8200"
+export CUSTOMER="volante"          # <-- match your terraform customer_name
+export VAULT_ADDR="https://vault-demo-cluster-public-vault-b71960ee.491753e4.z1.hashicorp.cloud:8200"
 export VAULT_NAMESPACE="admin"
 # export VAULT_TOKEN=...         your admin token
 ```
 
-| Thing | Name / path |
-|---|---|
-| KV mount (Act 1) | `${CUSTOMER}-kv`, secret at `app/config` |
-| App policy (Act 1) | `${CUSTOMER}-app` |
-| Userpass user (Act 1) | `appuser` |
-| Database engine (Act 2) | `database_${CUSTOMER}`, role `${CUSTOMER}-role` |
-| CI KV mount (Act 3) | `ci_${CUSTOMER}`, path `github-actions/demo` |
-| AppRole auth mount (Act 3/4) | `approle_${CUSTOMER}` |
-| CI AppRole role (Act 3) | `github-actions-${CUSTOMER}` |
-| CI policies (Act 3) | `${CUSTOMER}-ci-kv`, `${CUSTOMER}-ci-pki` |
-| PKI root / intermediate (Act 4) | `pki_${CUSTOMER}` / `pki_int_${CUSTOMER}` |
-| MariaDB PKI role (Act 4) | `mysql-role-${CUSTOMER}` |
-| Agent AppRole role (Act 4) | `mysql-vault-agent` |
-| Agent policy (Act 4) | `pki-mysql-${CUSTOMER}` |
+| Thing                           | Name / path                                     |
+| ------------------------------- | ----------------------------------------------- |
+| KV mount (Act 1)                | `${CUSTOMER}-kv`, secret at `app/config`        |
+| App policy (Act 1)              | `${CUSTOMER}-app`                               |
+| Userpass user (Act 1)           | `appuser`                                       |
+| Database engine (Act 2)         | `database_${CUSTOMER}`, role `${CUSTOMER}-role` |
+| CI KV mount (Act 3)             | `ci_${CUSTOMER}`, path `github-actions/demo`    |
+| AppRole auth mount (Act 3/4)    | `approle_${CUSTOMER}`                           |
+| CI AppRole role (Act 3)         | `github-actions-${CUSTOMER}`                    |
+| CI policies (Act 3)             | `${CUSTOMER}-ci-kv`, `${CUSTOMER}-ci-pki`       |
+| PKI root / intermediate (Act 4) | `pki_${CUSTOMER}` / `pki_int_${CUSTOMER}`       |
+| MariaDB PKI role (Act 4)        | `mysql-role-${CUSTOMER}`                        |
+| Agent AppRole role (Act 4)      | `mysql-vault-agent`                             |
+| Agent policy (Act 4)            | `pki-mysql-${CUSTOMER}`                         |
 
 Grab the live values before the call:
 
@@ -173,7 +173,7 @@ Optional proof it is a real, working login (needs psql and your IP in `db_allowe
 
 ```bash
 PGPASSWORD='<password-from-above>' psql \
-  "host=$(terraform output -raw db_host) user=<username-from-above> dbname=appdb sslmode=require" \
+  "host=ec2-18-234-200-127.compute-1.amazonaws.com user=v-token-hc-volante--0H58voSywOiOnYe8Rtqr-1787671047 dbname=appdb sslmode=require" \
   -c "select current_user;"
 ```
 
