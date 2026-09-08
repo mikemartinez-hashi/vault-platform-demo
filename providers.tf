@@ -2,12 +2,14 @@
 # Vault Platform Demo — one HCP Terraform workspace, one apply.
 #
 # Stands up, against an HCP Vault cluster + AWS account, a single coherent
-# "Vault platform" story in four acts:
+# "Vault platform" story in five acts:
 #
 #   Act 1  KV secrets            (vault-kv.tf)
 #   Act 2  Dynamic DB secrets    (vault-db.tf  -> RDS Postgres)
 #   Act 3  GitHub Actions + KV   (vault-ci.tf  + .github/workflows + ec2-ci-web.tf)
 #   Act 4  PKI + Vault Agent     (vault-pki.tf + ec2-mysql-agent.tf, Windows MariaDB)
+#   Act 5  PKI, agentless        (vault-pki-agentless.tf + ec2-web-agentless.tf,
+#                                 Ubuntu/nginx, systemd timer + curl)
 #
 # customer_name is the single customization knob — it prefixes/suffixes every
 # Vault mount, policy, role, and AWS resource so the same demo re-skins per

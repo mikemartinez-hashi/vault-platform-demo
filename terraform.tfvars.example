@@ -39,3 +39,13 @@ db_cred_max_ttl_seconds = 86400
 pki_common_name = "mysql.demo.internal"
 server_cert_ttl = "72h"          # short = visible rotation on renewal
 # mysql_root_password = "..."     # throwaway MariaDB root password
+
+# --- Act 5: agentless PKI rotation (Ubuntu + nginx) ---
+# Same intermediate CA as Act 4; the client is a systemd timer + curl, no agent.
+# Defaults below are deliberately aggressive so rotation is visible in a demo
+# slot: a 1h cert re-issued once it drops under 45m left ≈ every 15 minutes.
+agentless_common_name             = "web.demo.internal"
+agentless_cert_ttl                = "1h"
+agentless_renew_threshold_seconds = 2700   # re-issue with < 45 min of life left
+agentless_rotate_interval         = "5min" # how often the timer checks
+agentless_web_instance_type       = "t3.micro"

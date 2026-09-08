@@ -141,6 +141,61 @@ your CA isn't in the per-cert path, and no server ever holds a long-lived cert."
 
 ---
 
+## Act 5 — Same PKI, no agent (Ubuntu + nginx) (~5 min)
+
+**Confirm the objection:** "We're not deploying another agent on every host."
+Act 5 is the answer: identical Vault-side config as Act 4 — same intermediate CA,
+an AppRole and a PKI role — but the client is a shell script on a systemd timer.
+
+1. **Show the running result first:**
+   ```bash
+   terraform output agentless_web_url
+   ```
+   → Open it. Browser warns (the root CA isn't in your trust store — expected).
+   Click through: the page shows the current **serial**, subject, issuer, validity
+   window, and a running list of the last 10 serials this host has served.
+
+2. **Connect and show the mechanism:**
+   ```bash
+   $(terraform output -raw ssm_connect_agentless_web)
+   sudo cat /usr/local/bin/vault-cert-rotate.sh
+   systemctl list-timers vault-cert-rotate.timer
+   ```
+   → "That's the whole thing. `curl` to AppRole login, `curl` to the PKI issue
+   endpoint, write three PEM files, `systemctl reload nginx`. No agent, no
+   daemon, no long-lived token on disk — the token it logs in with has a 5-minute
+   TTL and is thrown away."
+
+3. **The money shot — force a rotation live:**
+   ```bash
+   openssl x509 -in /etc/vault-pki/cert.pem -noout -serial -dates
+   sudo /usr/local/bin/vault-cert-rotate.sh --force
+   openssl x509 -in /etc/vault-pki/cert.pem -noout -serial -dates
+   ```
+   → New serial, new validity window. Refresh the browser page: the rotation
+   counter increments and the previous serial drops into the history list.
+   nginx was **reloaded**, not restarted — existing connections were not dropped.
+
+4. **Show the no-op path** (this is what makes it safe to run every 5 minutes):
+   ```bash
+   sudo /usr/local/bin/vault-cert-rotate.sh
+   tail -n 5 /var/log/vault-cert-rotate.log
+   ```
+   → "It checks remaining life first. Under the threshold it re-issues; over it,
+   it does nothing and exits. Idempotent by design."
+
+**Land it:** "Vault doesn't care what the client is. Agent, sidecar, CSI driver,
+GitHub Actions, or forty lines of bash — the AppRole and the PKI role are the
+contract. Pick whatever your platform team will actually operate."
+
+**Tuning knobs** (`terraform.tfvars`): `agentless_cert_ttl` (default `1h`),
+`agentless_renew_threshold_seconds` (default `2700` — re-issues with 45 min left,
+so roughly every 15 min), `agentless_rotate_interval` (default `5min`). Those
+defaults are deliberately aggressive so rotation is visible inside a demo slot;
+real deployments run a longer TTL and check daily.
+
+---
+
 ## Teardown
 
 **`terraform destroy` on its own will fail if any dynamic DB lease is still
@@ -192,6 +247,8 @@ step 1 every time — it's a no-op when there's nothing to revoke.
 - **Namespaces, DR/Performance Replication, Transit, Radar** — POC / deep-dive.
 - **Windows IIS / Tomcat cert-store injection** — same agent, different hook;
   covered in the standalone PKI lifecycle demo if they want the full platform matrix.
+  (Act 5 shows the agentless pattern on Linux/nginx; the Windows equivalent is the
+  same script shape in PowerShell against the cert store — not built here.)
 
 ## If something breaks
 
@@ -199,6 +256,11 @@ step 1 every time — it's a no-op when there's nothing to revoke.
   RDS. Check `db_allowed_cidrs` includes your HCP Vault egress IP.
 - **Act 4 cert never renders** → `Get-Content C:\Vault\logs\agent.log`. Usual
   cause: `vault_version` doesn't match the HCP Vault server, or AppRole policy.
+- **Act 5 page won't load / nginx down** → `journalctl -u vault-cert-rotate.service
+  -n 30 --no-pager` and `tail /var/log/act5-bootstrap.log`. Usual cause: the
+  AppRole login or the PKI issue call failed, so no cert was written and nginx
+  refused to start. `sudo /usr/local/bin/vault-cert-rotate.sh --force` re-runs it
+  with the error in view.
 - **GitHub Actions plan empty** → check repo secrets/variables and that
   `backend.tf` (or `TF_CLOUD_*`) points at the right workspace.
 - **`terraform destroy` fails with `failed to find entry for connection`** → a

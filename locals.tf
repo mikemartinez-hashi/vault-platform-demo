@@ -24,6 +24,12 @@ locals {
   mysql_approle  = "mysql-vault-agent"
   mysql_policy   = "pki-mysql-${var.customer_name}"
 
+  # Act 5 — same intermediate CA, no agent. A separate PKI role, policy and
+  # AppRole so the agentless host's blast radius is independent of Act 4's.
+  web_pki_role = "web-role-${var.customer_name}"
+  web_approle  = "web-agentless"
+  web_policy   = "pki-web-agentless-${var.customer_name}"
+
   common_tags = {
     Environment = var.environment
     Owner       = var.owner

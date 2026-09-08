@@ -232,3 +232,50 @@ variable "mariadb_msi_url" {
   type        = string
   default     = "https://downloads.mariadb.com/MariaDB/mariadb-11.4.4/winx64-packages/mariadb-11.4.4-winx64.msi"
 }
+
+# =============================================================================
+# Act 5 — Agentless PKI rotation (Ubuntu + nginx, systemd timer + curl)
+# =============================================================================
+variable "agentless_web_instance_type" {
+  description = "EC2 instance type for the agentless PKI rotation web server."
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "agentless_common_name" {
+  description = "Common name the rotation script requests for the nginx server certificate."
+  type        = string
+  default     = "web.demo.internal"
+}
+
+variable "agentless_allowed_domains" {
+  description = "Allowed domains for the agentless nginx PKI role."
+  type        = list(string)
+  default     = ["demo.internal", "web.internal"]
+}
+
+variable "agentless_cert_ttl" {
+  description = <<-EOT
+    TTL requested for the nginx leaf cert. Short on purpose so rotation is
+    visible inside a demo slot - 1h with a 45m renewal threshold means the
+    script re-issues roughly every 15 minutes. Must be <= the PKI role max_ttl.
+  EOT
+  type        = string
+  default     = "1h"
+}
+
+variable "agentless_renew_threshold_seconds" {
+  description = <<-EOT
+    Re-issue once the current cert has less than this many seconds of life
+    left. Real-world guidance is roughly a third to a half of the TTL; 2700s
+    against a 1h TTL is deliberately aggressive for demo visibility.
+  EOT
+  type        = number
+  default     = 2700
+}
+
+variable "agentless_rotate_interval" {
+  description = "systemd timer interval (OnUnitActiveSec) for the rotation check, e.g. 5min."
+  type        = string
+  default     = "5min"
+}

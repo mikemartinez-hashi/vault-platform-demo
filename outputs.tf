@@ -99,3 +99,37 @@ output "pki_verify_hint" {
     # Prove live TLS reload: force a re-issue, watch FLUSH SSL fire, cert serial changes.
   EOT
 }
+
+# ── Act 5 — Agentless PKI rotation (Ubuntu + nginx) ─────────────────────────
+output "agentless_web_url" {
+  description = "HTTPS URL of the agentless rotation demo. The cert is Vault-issued off the same intermediate CA as Act 4, so expect a browser trust warning unless you import the root."
+  value       = "https://${aws_instance.web_agentless.public_dns}"
+}
+
+output "ssm_connect_agentless_web" {
+  description = "SSM Session Manager command for the agentless web server (Act 5)."
+  value       = "aws ssm start-session --target ${aws_instance.web_agentless.id} --region ${var.aws_region}"
+}
+
+output "agentless_verify_hint" {
+  description = "Verify and force agentless rotation (run via SSM on the Act 5 host)."
+  value       = <<-EOT
+    # What the timer is doing
+    systemctl list-timers vault-cert-rotate.timer
+    journalctl -u vault-cert-rotate.service -n 30 --no-pager
+    tail -n 20 /var/log/vault-cert-rotate.log
+
+    # Current cert on disk
+    openssl x509 -in /etc/vault-pki/cert.pem -noout -subject -issuer -dates -serial
+
+    # Force a rotation live, then re-check the serial (nginx reloads, no restart)
+    sudo /usr/local/bin/vault-cert-rotate.sh --force
+
+    # Prove it from the wire
+    echo | openssl s_client -connect ${aws_instance.web_agentless.public_dns}:443 2>/dev/null \
+      | openssl x509 -noout -serial -dates
+
+    # Read the whole mechanism - it is one shell script, no agent
+    cat /usr/local/bin/vault-cert-rotate.sh
+  EOT
+}

@@ -2,7 +2,7 @@
 
 One HCP Terraform workspace, one apply — a single coherent "Vault platform"
 story that covers **KV**, **dynamic DB secrets**, **GitHub Actions secret
-injection**, and **PKI with Vault Agent**. It merges three earlier demos
+injection**, and **PKI both with and without Vault Agent**. It merges three earlier demos
 (`vault-simple-demo`, `tf-demo-hashi_gba_Vault`, `pki-workflow-advent`) into one,
 customizable per account with a single `customer_name` variable.
 
@@ -12,6 +12,7 @@ customizable per account with a single `customer_name` variable.
 | 2 | The differentiator: dynamic secrets | Database engine → RDS Postgres |
 | 3 | Secrets in your pipeline | GitHub Actions pulls a **KV** secret (+ issues a PKI cert) via AppRole, injects into a web server |
 | 4 | Certificate lifecycle, automated | Root→Intermediate **PKI** + **Vault Agent** on Windows MariaDB — cert/key rendered as plain files, `FLUSH SSL` in place |
+| 5 | Same PKI, **no agent** | Ubuntu + nginx — a `curl`/`jq` script on a **systemd timer** issues off the same intermediate and reloads nginx in place |
 
 ## The `customer_name` knob
 
@@ -38,14 +39,18 @@ vault-kv.tf             Act 1 — KV + userpass + policy
 vault-db.tf             Act 2 — RDS Postgres + database secrets engine
 vault-pki.tf            Act 4 (config) — Root→Intermediate CA, leaf roles, agent AppRole
 vault-ci.tf             Act 3 (config) — GitHub Actions AppRole, CI KV secret, CI policies
+vault-pki-agentless.tf  Act 5 (config) — nginx PKI role + narrow AppRole/policy (no agent)
 
 ec2-ci-web.tf           Act 3 (infra) — Linux/Apache web server (CI-injected page)
 ec2-mysql-agent.tf      Act 4 (infra) — Windows MariaDB + Vault Agent
+ec2-web-agentless.tf    Act 5 (infra) — Ubuntu/nginx, cert rotated by a systemd timer
 
 templates/
   ci_web_userdata.sh.tpl            CI web page (KV + PKI values baked at pipeline time)
   windows_mysql_userdata.ps1.tpl    Windows: Vault + MariaDB + agent bootstrap
   vault-agent/agent-windows.hcl.tpl Vault Agent config (templates + FLUSH SSL hook)
+  agentless_web_userdata.sh.tpl     Ubuntu: nginx + rotation script + systemd timer
+  agentless/vault-cert-rotate.sh.tpl  the whole agentless mechanism, ~120 lines of bash
 
 .github/workflows/
   vault-inject-pr.yml     PR/dispatch → AppRole login, pull KV secret + issue PKI cert, PR comment + run summary
@@ -131,6 +136,38 @@ For the demo, both Vault Agent and MariaDB run as LocalSystem so the DB can read
 the agent-written files. **In production** you'd instead ACL `C:\Vault\certs` to
 the database service account and keep least privilege — the model your team
 described. Verification steps are in `DEMO-RUNBOOK.md`.
+
+## Act 5 — how the agentless rotation works
+
+Act 4's objection is almost always *"we're not putting another agent on every
+host."* Act 5 is the same Vault configuration answered with a shell script.
+
+1. Terraform creates a second PKI role (`web-role-<customer>`) on the **same
+   intermediate CA** as Act 4, plus its own AppRole and a deliberately narrower
+   policy — issue on that one path, `lookup-self`, nothing else. No
+   `renew-self`: the script logs in fresh each run with a 5-minute token and
+   lets it expire.
+2. `templates/agentless/vault-cert-rotate.sh.tpl` is rendered at apply time and
+   dropped at `/usr/local/bin/vault-cert-rotate.sh`. Each run it:
+   - reads `notAfter` off the current cert and exits if there's more life left
+     than `agentless_renew_threshold_seconds` (so it's safe on a 5-minute timer),
+   - `curl`s an AppRole login, `curl`s `POST pki_int_<customer>/issue/web-role-<customer>`,
+   - writes `cert.pem` / `key.pem` / `fullchain.pem` / `chain.pem` to
+     `/etc/vault-pki` via an atomic rename, so nginx never reads a half-written file,
+   - runs `nginx -t` then `systemctl reload nginx` — **reload, not restart**, so
+     live connections aren't dropped,
+   - regenerates the status page with the new serial and a 10-entry serial history.
+3. `vault-cert-rotate.timer` (`OnUnitActiveSec = agentless_rotate_interval`)
+   drives it. `--force` rotates on demand for the live demo.
+
+Demo defaults are deliberately aggressive for visibility: `agentless_cert_ttl = "1h"`
+with a 2700s renewal threshold means a re-issue roughly every 15 minutes. Raise
+both for anything resembling a real deployment.
+
+**Demo shortcut to call out:** the AppRole `secret_id` is written to disk by
+cloud-init. In production you'd use AWS IAM auth (no static secret at all),
+response-wrapped secret-id delivery, or Vault Secrets Operator — the rest of the
+script is unchanged.
 
 ## Cleanup
 
