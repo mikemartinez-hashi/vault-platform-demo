@@ -1,6 +1,12 @@
 # Copy to terraform.tfvars (local) or set as HCP Terraform workspace variables.
-# Mark demo_password / sample_api_key / ci_kv_secret_value / mysql_root_password
-# as sensitive.
+#
+# REQUIRED, no defaults - Terraform prompts on the CLI and HCP Terraform refuses
+# to plan until they are set. Mark both sensitive on the workspace:
+#   demo_password         Act 1 userpass login for var.demo_username
+#   mysql_root_password   Act 4 MariaDB root password
+#
+# Optional but sensitive if you set them: db_master_password, sample_api_key,
+# ci_kv_secret_value.
 #
 # Provider creds go in as ENVIRONMENT variables on the workspace, not here:
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY    (or a dynamic provider credential)
@@ -26,19 +32,26 @@ db_allowed_cidrs = [
   # "<YOUR_PUBLIC_IP>/32",
 ]
 
-# --- Act 1: KV demo login ---
+# --- Act 1: KV demo login (the "appuser" identity) ---
 demo_username = "appuser"
-# demo_password = "..."         # throwaway value for the live demo login
+demo_password = ""              # REQUIRED, min 12 chars, throwaway. Mark sensitive.
 
 # Short TTL = a live "watch it expire" moment; longer = revoke live instead.
 # 300 = 5 min: long enough to demo, short enough that leases are gone by teardown.
 db_cred_ttl_seconds     = 300
 db_cred_max_ttl_seconds = 86400
 
+# --- Act 2: RDS master password ---
+# Optional. Leave it out entirely and Terraform generates a 24-char password -
+# read it back with `terraform output -raw db_master_password`. Set it only if
+# you want to know the value up front (e.g. to paste into psql on a shared
+# screen). RDS rejects '/', '@', '"' and whitespace; 8-128 chars.
+# db_master_password = ""       # Mark sensitive if you set it.
+
 # --- Act 4: PKI + Vault Agent (Windows MariaDB) ---
-pki_common_name = "mysql.demo.internal"
-server_cert_ttl = "72h"          # short = visible rotation on renewal
-# mysql_root_password = "..."     # throwaway MariaDB root password
+pki_common_name     = "mysql.demo.internal"
+server_cert_ttl     = "72h"      # short = visible rotation on renewal
+mysql_root_password = ""         # REQUIRED, min 12 chars, throwaway. Mark sensitive.
 
 # --- Act 5: agentless PKI rotation (Ubuntu + nginx) ---
 # Same intermediate CA as Act 4; the client is a systemd timer + curl, no agent.

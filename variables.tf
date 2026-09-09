@@ -83,10 +83,19 @@ variable "demo_username" {
 }
 
 variable "demo_password" {
-  description = "Password for the live demo login. Set a throwaway value."
+  description = <<-EOT
+    Password for the live least-privilege userpass demo login (Act 1, user
+    var.demo_username). REQUIRED - no default, so Terraform prompts for it on
+    the CLI and HCP Terraform refuses to plan until the workspace variable is
+    set. Use a throwaway value; it is never a real credential.
+  EOT
   type        = string
-  default     = "SecurePass123!"
-  # sensitive   = true
+  sensitive   = true
+
+  validation {
+    condition     = length(var.demo_password) >= 12
+    error_message = "demo_password must be at least 12 characters."
+  }
 }
 
 # =============================================================================
@@ -112,6 +121,31 @@ variable "db_name" {
   description = "Initial database name on the RDS instance."
   type        = string
   default     = "appdb"
+}
+
+variable "db_master_password" {
+  description = <<-EOT
+    Master password for the RDS Postgres instance, which Vault uses to manage
+    dynamic credentials (Act 2). Leave null (the default) to have Terraform
+    generate a 24-character random password - read it back with
+    `terraform output -raw db_master_password`. Set it explicitly when you want
+    to hand the same password to someone else, or paste it into a psql session
+    without a terraform output round-trip.
+
+    RDS rejects '/', '@', '"' and spaces in this field.
+  EOT
+  type        = string
+  sensitive   = true
+  default     = null
+
+  validation {
+    condition = var.db_master_password == null || (
+      length(coalesce(var.db_master_password, "")) >= 8 &&
+      length(coalesce(var.db_master_password, "")) <= 128 &&
+      !can(regex("[/@\"[:space:]]", coalesce(var.db_master_password, "x")))
+    )
+    error_message = "db_master_password must be 8-128 characters and must not contain '/', '@', '\"' or whitespace (RDS restriction)."
+  }
 }
 
 variable "db_master_username" {
@@ -221,10 +255,22 @@ variable "mysql_instance_type" {
 }
 
 variable "mysql_root_password" {
-  description = "Root password for MariaDB on the Windows instance (demo-only, throwaway)."
+  description = <<-EOT
+    Root password for MariaDB on the Windows instance (Act 4). REQUIRED - no
+    default, so Terraform prompts for it on the CLI and HCP Terraform refuses to
+    plan until the workspace variable is set. Demo-only, throwaway.
+
+    Note: this value is baked into the instance user_data (and therefore into
+    state) so the bootstrap can install MariaDB silently and run the FLUSH SSL
+    reload hook. Treat the instance as disposable and destroy it after the demo.
+  EOT
   type        = string
-  default     = "DemoRootPass123!"
-  # sensitive   = true
+  sensitive   = true
+
+  validation {
+    condition     = length(var.mysql_root_password) >= 12
+    error_message = "mysql_root_password must be at least 12 characters."
+  }
 }
 
 variable "mariadb_msi_url" {

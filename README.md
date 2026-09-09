@@ -67,6 +67,9 @@ TALK-TRACK.md             full UI + CLI talk track
 - **HCP Vault** cluster: `VAULT_ADDR`, an admin `VAULT_TOKEN`, `VAULT_NAMESPACE` (usually `admin`).
 - **HCP Vault egress IP** — from the HCP portal, for `db_allowed_cidrs` (Act 2).
 - **AWS** account + credentials + an existing EC2 **key pair** (`key_name`).
+- **Two throwaway passwords** you choose: `demo_password` (Act 1 `appuser`
+  login) and `mysql_root_password` (Act 4 MariaDB root). Both are required and
+  have no defaults — see [Deploy](#hcp-terraform-primary-path).
 - **`vault_version`** matching your HCP Vault server version (Act 4 agent must match).
 
 ### Provider credentials = workspace ENVIRONMENT variables
@@ -94,7 +97,25 @@ URLs and the Vault Agent config, not for authentication.
    `AWS_SECRET_ACCESS_KEY` sensitive).
 3. Add the **Terraform** variables from `terraform.tfvars.example` — especially
    `customer_name`, `vault_addr`, `db_allowed_cidrs`, `key_name`, and the
-   sensitive passwords.
+   passwords below.
+
+   **Two passwords are required and have no defaults**, so a plan fails until
+   they're set (on the CLI, Terraform prompts for them):
+
+   | Variable | What it is | Rule |
+   |---|---|---|
+   | `demo_password` | Act 1 userpass login for `var.demo_username` (`appuser`) | min 12 chars |
+   | `mysql_root_password` | Act 4 MariaDB root password on the Windows box | min 12 chars |
+
+   Mark both **sensitive** on the workspace. Use throwaway values — neither is a
+   real credential, and `mysql_root_password` is baked into the Windows instance
+   `user_data` (and therefore state) so the bootstrap can install MariaDB
+   silently and run the `FLUSH SSL` hook.
+
+   **`db_master_password`** (Act 2, RDS Postgres) is optional: leave it unset and
+   Terraform generates one — `terraform output -raw db_master_password` reads it
+   back either way. Set it only when you want the value up front. RDS rejects
+   `/`, `@`, `"` and whitespace.
 4. Queue a plan & apply.
 
 > **`db_allowed_cidrs` must include your HCP Vault cluster's egress IP** or Act 2

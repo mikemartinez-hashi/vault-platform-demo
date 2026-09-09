@@ -21,8 +21,8 @@ output "db_host" {
 }
 
 output "db_master_password" {
-  description = "RDS master password (for direct psql access during the demo)."
-  value       = random_password.db_master.result
+  description = "RDS master password (for direct psql access during the demo) - whatever you set in var.db_master_password, or the generated value if you left it null. Read with `terraform output -raw db_master_password`."
+  value       = local.db_master_password
   sensitive   = true
 }
 

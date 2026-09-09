@@ -36,9 +36,16 @@ resource "aws_security_group" "db" {
   tags = local.common_tags
 }
 
+# Fallback when var.db_master_password is null. `special = false` keeps the
+# generated value clear of RDS's forbidden characters ('/', '@', '"', space).
 resource "random_password" "db_master" {
   length  = 24
   special = false
+}
+
+locals {
+  # An explicit var.db_master_password wins; otherwise use the generated one.
+  db_master_password = coalesce(var.db_master_password, random_password.db_master.result)
 }
 
 resource "aws_db_instance" "demo" {
@@ -52,7 +59,7 @@ resource "aws_db_instance" "demo" {
 
   db_name  = var.db_name
   username = var.db_master_username
-  password = random_password.db_master.result
+  password = local.db_master_password
 
   db_subnet_group_name    = aws_db_subnet_group.demo.name
   vpc_security_group_ids  = [aws_security_group.db.id]
@@ -79,7 +86,7 @@ resource "vault_database_secret_backend_connection" "postgres" {
   postgresql {
     connection_url = "postgresql://{{username}}:{{password}}@${aws_db_instance.demo.address}:${aws_db_instance.demo.port}/${aws_db_instance.demo.db_name}?sslmode=require"
     username       = aws_db_instance.demo.username
-    password       = random_password.db_master.result
+    password       = local.db_master_password
   }
 }
 
