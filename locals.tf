@@ -39,6 +39,20 @@ locals {
   pub_approle       = "web-public-ca"
   pub_policy        = "pki-public-${var.customer_name}"
 
+  # Act 7 — SSH CA. Inert unless enable_ssh_ca.
+  act7       = var.enable_ssh_ca
+  ssh_mount  = "ssh_${var.customer_name}"
+  ssh_role   = "technician-${var.customer_name}"
+  ssh_policy = "ssh-signer-${var.customer_name}"
+
+  # Act 8 — LDAP/AD password rotation. Inert unless enable_ldap.
+  act8                 = var.enable_ldap
+  ldap_mount           = "ldap_${var.customer_name}"
+  ldap_consumer_policy = "ldap-consumer-${var.customer_name}"
+  ldap_operator_policy = "ldap-operator-${var.customer_name}"
+  ldap_base_dn         = join(",", [for part in split(".", var.ldap_domain) : "dc=${part}"])
+  ldap_cidrs           = coalesce(var.ldap_allowed_cidrs, var.db_allowed_cidrs)
+
   common_tags = {
     Environment = var.environment
     Owner       = var.owner

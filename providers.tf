@@ -2,7 +2,7 @@
 # Vault Platform Demo — one HCP Terraform workspace, one apply.
 #
 # Stands up, against an HCP Vault cluster + AWS account, a single coherent
-# "Vault platform" story in five acts:
+# "Vault platform" story in up to eight acts:
 #
 #   Act 1  KV secrets            (vault-kv.tf)
 #   Act 2  Dynamic DB secrets    (vault-db.tf  -> RDS Postgres)
@@ -10,6 +10,9 @@
 #   Act 4  PKI + Vault Agent     (vault-pki.tf + ec2-mysql-agent.tf, Windows MariaDB)
 #   Act 5  PKI, agentless        (vault-pki-agentless.tf + ec2-web-agentless.tf,
 #                                 Ubuntu/nginx, systemd timer + curl)
+#   Act 6  Public CA (optional)  (vault-pki-external-ca.tf, enable_public_ca)
+#   Act 7  SSH CA                (vault-ssh-ca.tf + ec2-ssh-ca.tf, enable_ssh_ca)
+#   Act 8  AD password rotation  (vault-ldap.tf + ec2-ldap-ad.tf, enable_ldap, off by default)
 #
 # customer_name is the single customization knob — it prefixes/suffixes every
 # Vault mount, policy, role, and AWS resource so the same demo re-skins per
@@ -36,6 +39,10 @@ terraform {
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.11"
     }
     vault = {
       source  = "hashicorp/vault"

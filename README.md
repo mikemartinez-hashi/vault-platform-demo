@@ -14,6 +14,8 @@ customizable per account with a single `customer_name` variable.
 | 4 | Certificate lifecycle, automated | Root→Intermediate **PKI** + **Vault Agent** on Windows MariaDB — cert/key rendered as plain files, `FLUSH SSL` in place |
 | 5 | Same PKI, **no agent** | Ubuntu + nginx — a `curl`/`jq` script on a **systemd timer** issues off the same intermediate and reloads nginx in place |
 | 6 | Certs from a **real public CA** *(optional)* | `pki-external-ca` engine — Vault holds the ACME account and fulfills DNS-01 in Route53; same agentless script shape, different trust root |
+| 7 | **SSH** without static keys | SSH secrets engine as a CA — Vault signs a technician's key, the host verifies the cert locally (`enable_ssh_ca`, default on) |
+| 8 | **AD** service-account password rotation *(optional, slow)* | LDAP secrets engine static roles against a Windows domain controller (`enable_ldap`, default **off**, ~15 min bootstrap) |
 
 ## The `customer_name` knob
 
@@ -43,6 +45,11 @@ vault-ci.tf             Act 3 (config) — GitHub OIDC (JWT) auth, CI KV secret,
 vault-pki-agentless.tf  Act 5 (config) — nginx PKI role + narrow AppRole/policy (no agent)
 vault-pki-external-ca.tf Act 6 (config) — pki-external-ca mount, ACME account, Route53 DNS-01, role
 iam-route53-acme.tf     Act 6 (infra)  — scoped IAM user for Vault's DNS-01 + the A record
+
+vault-ssh-ca.tf         Act 7 (config) — SSH CA mount, two signing roles, signer policy, technician user
+ec2-ssh-ca.tf           Act 7 (infra)  — key-less Ubuntu target that trusts the CA
+vault-ldap.tf           Act 8 (config) — LDAP engine, static roles, consumer/operator policies
+ec2-ldap-ad.tf          Act 8 (infra)  — Windows AD domain controller, EIP, 15-min bootstrap wait
 
 ec2-ci-web.tf           Act 3 (infra) — Linux/Apache web server (CI-injected page)
 ec2-mysql-agent.tf      Act 4 (infra) — Windows MariaDB + Vault Agent
@@ -198,7 +205,7 @@ script is unchanged.
 Acts 4 and 5 issue from an intermediate CA Vault holds. Act 6 is the other half
 of the PKI story: certificates from a **real external CA**, using the
 `pki-external-ca` secrets engine. Set `enable_public_ca = true` to turn it on;
-everything is `count`-gated so the five-act demo is byte-identical when it's off.
+everything is `count`-gated so the core-act demo is byte-identical when it's off.
 
 **Verified on this stack (2026-09-09):** the engine mounts successfully on HCP
 Vault Dedicated running **2.0.3+ent**. It requires Vault **Enterprise 2.0.0+**.
@@ -241,6 +248,35 @@ the documented API paths. The order-status polling is written defensively — it
 retries `fetch-cert` and accepts the first response containing a certificate
 rather than matching status strings — but the exact status vocabulary is
 unconfirmed. Expect to iterate on the first real apply.
+
+## Act 7 — SSH certificate authority
+
+`enable_ssh_ca` (default `true`). Vault generates an SSH CA keypair; the Ubuntu
+target gets only the **public** key (`TrustedUserCAKeys`) at launch and has no EC2
+key pair, so the only way in is a Vault-signed certificate. A `technician`
+userpass identity (password = `demo_password`) may sign on two roles: a short-TTL
+connected-technician role (`ssh_technician_cert_ttl`, 1h) and a long-TTL
+offline/"dark fleet" role (`ssh_device_cert_ttl`, 10y). After the apply, paste the
+`ssh_ca_demo_env` workspace output into a shell and run `scripts/ssh-ca/connect.sh`.
+
+Demo shortcuts: the audit device from the standalone demo is dropped (HCP Vault
+manages audit centrally), and `ssh_allowed_cidrs` defaults to `0.0.0.0/0` (cert
+auth still gates access; restrict it to your IP anyway).
+
+## Act 8 — Active Directory password rotation
+
+`enable_ldap` (default `false`). Promotes a Windows Server 2025 `t3.large` to a
+domain controller for `ldap_domain`, creates `svc-app1` / `svc-app2`, and points
+Vault's LDAP secrets engine at it over **LDAPS** with static roles that rotate
+every `rotation_period` (default 120s). It is a Windows **Active Directory**
+server, not OpenLDAP as the old standalone README claimed.
+
+Before enabling: set `ldap_admin_password` (12+ chars, sensitive), and make sure
+`ldap_allowed_cidrs` (defaults to `db_allowed_cidrs`) includes the **HCP Vault
+egress IP**, or the engine mount fails its connection check. The bootstrap is a
+three-phase, two-reboot script; Terraform waits 900s before configuring Vault, so
+the apply takes ~15+ minutes. Bootstrap log: `C:\ldap-bootstrap.log` (via SSM).
+Demo shortcut: `insecure_tls = true` skips verifying the DC's self-signed cert.
 
 ## Cleanup
 

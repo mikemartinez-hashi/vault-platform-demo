@@ -158,3 +158,61 @@ output "public_ca_verify_hint" {
     sudo /usr/local/bin/vault-public-cert.sh --force
   EOT
 }
+
+# ── Act 7 — SSH CA (optional, default on) ───────────────────────────────────
+output "ssh_ca_public_ip" {
+  description = "Public IP of the SSH CA target host (Act 7). Empty unless enable_ssh_ca."
+  value       = local.act7 ? aws_instance.ssh_ca[0].public_ip : ""
+}
+
+output "ssh_ca_ca_public_key" {
+  description = "The SSH CA public key the target trusts (sshd TrustedUserCAKeys). The private key never leaves Vault."
+  value       = local.act7 ? vault_ssh_secret_backend_ca.this[0].public_key : ""
+}
+
+output "ssh_ca_demo_env" {
+  description = "Paste into your shell, then run scripts/ssh-ca/connect.sh (and revoke-and-test.sh)."
+  value       = !local.act7 ? "Act 7 disabled (enable_ssh_ca = false)." : <<-EOT
+    export EC2_IP=${aws_instance.ssh_ca[0].public_ip}
+    export DEMO_USER=${var.ssh_principal}
+    export SSH_MOUNT=${vault_mount.ssh[0].path}
+    export SSH_ROLE=${vault_ssh_secret_backend_role.technician[0].name}
+    # Sign as the technician identity (not root) so the policy boundary is real:
+    vault login -method=userpass username=${var.ssh_technician_username}
+    # Then:  ./scripts/ssh-ca/connect.sh   or   ./scripts/ssh-ca/connect.sh --longterm
+  EOT
+}
+
+output "ssm_connect_ssh_ca" {
+  description = "SSM Session Manager command for the SSH CA target (Act 7)."
+  value       = local.act7 ? "aws ssm start-session --target ${aws_instance.ssh_ca[0].id} --region ${var.aws_region}" : ""
+}
+
+# ── Act 8 — LDAP / AD rotation (optional, default off) ──────────────────────
+output "ldap_server_public_ip" {
+  description = "Public IP of the AD domain controller (Act 8). Empty unless enable_ldap."
+  value       = local.act8 ? aws_eip.ldap[0].public_ip : ""
+}
+
+output "ssm_connect_ldap" {
+  description = "SSM Session Manager command for the domain controller (Act 8). Bootstrap log: C:\\ldap-bootstrap.log"
+  value       = local.act8 ? "aws ssm start-session --target ${aws_instance.ldap[0].id} --region ${var.aws_region}" : ""
+}
+
+output "ldap_demo_commands" {
+  description = "Read rotated creds, force a rotation, and verify (Act 8)."
+  value       = !local.act8 ? "Act 8 disabled (enable_ldap = false)." : <<-EOT
+    # Current password for each static role (changes every rotation_period)
+    %{for r, _ in var.ldap_static_roles~}
+    vault read ${local.ldap_mount}/static-cred/${r}
+    %{endfor~}
+
+    # Force a rotation now
+    %{for r, _ in var.ldap_static_roles~}
+    vault write -f ${local.ldap_mount}/rotate-role/${r}
+    %{endfor~}
+
+    # Scripted before/after proof
+    ./scripts/ldap/verify-rotation.sh ${local.ldap_mount} ${keys(var.ldap_static_roles)[0]}
+  EOT
+}

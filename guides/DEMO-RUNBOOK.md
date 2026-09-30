@@ -1,6 +1,6 @@
 # Vault Platform Demo — Runbook (live script)
 
-Four acts, ~30 min end to end. Rehearse the command sequence once before the
+Acts 1-5 are the core flow (~30 min); Acts 6-8 are optional add-ons you show by use case. Rehearse the command sequence once before the
 call. Confirm the pain out loud before each act — demo *to* a driver, not just
 at a feature. Replace `<customer>` below with your `customer_name`.
 
@@ -199,6 +199,60 @@ contract. Pick whatever your platform team will actually operate."
 so roughly every 15 min), `agentless_rotate_interval` (default `5min`). Those
 defaults are deliberately aggressive so rotation is visible inside a demo slot;
 real deployments run a longer TTL and check daily.
+
+---
+
+## Act 7 — SSH certificate authority (~6 min) — `enable_ssh_ca` (default on)
+
+**Confirm the driver:** "How do people and automation get SSH access today, and
+who revokes the key when someone leaves? Static keys outlive the people they
+were issued to."
+
+Pre-req: paste the exports from the workspace output `ssh_ca_demo_env` (it also
+logs you in as the `technician` userpass identity, not admin).
+
+1. **Show the target has no key pair and never talks to Vault.** The host only
+   trusts the CA public key (`TrustedUserCAKeys`). `terraform output`
+   `ssh_ca_ca_public_key` is that key; the private key never leaves Vault.
+2. **Connect:**
+   ```bash
+   ./scripts/ssh-ca/connect.sh              # 1h technician cert
+   ./scripts/ssh-ca/connect.sh --longterm   # 10-year "dark fleet" cert
+   ```
+   Show `ssh-keygen -L` output: principal `demo-tech`, TTL, serial. → "Vault signed
+   a public key. sshd verified the signature locally. No static key, no password."
+3. **Boundary:** as `technician`, try anything else (e.g. `vault kv get
+   <customer>-kv/app/config`) → denied. The policy signs on two roles, nothing more.
+4. **Revocation (admin token required):** `./scripts/ssh-ca/revoke-and-test.sh`
+   deletes the signing role, new signing fails, the already-issued cert keeps
+   working until its TTL. Say that trade-off out loud: it is why short TTLs matter.
+   Re-run the apply afterward to recreate the role.
+
+**Land it:** "Same idea as the PKI acts: short-lived certificates instead of
+long-lived credentials, issued against an identity and a policy."
+
+---
+
+## Act 8 — AD password rotation via LDAP engine (~6 min) — `enable_ldap` (default OFF)
+
+Slow and heavy: a Windows domain controller that takes **~15 min to bootstrap**.
+Turn it on (and apply) well before the call, only for AD-heavy accounts. Needs
+`ldap_admin_password` and an allowed-CIDR list that includes the HCP Vault egress IP.
+
+**Confirm the driver:** "You have service accounts whose passwords nobody dares
+change because something depends on them."
+
+1. Show the output `ldap_demo_commands`. **Read the current password:**
+   `vault read ldap_<customer>/static-cred/service-account-1`
+2. Run it again after the rotation period (default 120s), or force it:
+   `vault write -f ldap_<customer>/rotate-role/service-account-1`. The password
+   changes; `last_vault_rotation` and `ttl` move.
+3. `./scripts/ldap/verify-rotation.sh ldap_<customer> service-account-1` prints
+   the before/after proof.
+
+**Contrast with Act 2:** Act 2 mints short-lived accounts that did not exist;
+Act 8 takes over an *existing* account's password and rotates it. Two answers
+to two different legacy problems.
 
 ---
 

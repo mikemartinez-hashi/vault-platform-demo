@@ -427,3 +427,105 @@ variable "public_cert_renew_threshold_seconds" {
   type        = number
   default     = 2592000
 }
+
+# =============================================================================
+# Act 7 — SSH certificate authority
+# =============================================================================
+variable "enable_ssh_ca" {
+  description = "Turn on Act 7: Vault SSH CA + a key-less EC2 target that trusts it."
+  type        = bool
+  default     = true
+}
+
+variable "ssh_principal" {
+  description = "Linux user the signed certificate is valid for on the target host."
+  type        = string
+  default     = "demo-tech"
+}
+
+variable "ssh_technician_username" {
+  description = "Vault userpass identity that may sign SSH certs (password = demo_password)."
+  type        = string
+  default     = "technician"
+}
+
+variable "ssh_technician_cert_ttl" {
+  description = "TTL for short-lived technician certs (connected fleet)."
+  type        = string
+  default     = "1h"
+}
+
+variable "ssh_device_cert_ttl" {
+  description = "TTL for long-lived device certs (offline/dark fleet). 87600h = 10 years."
+  type        = string
+  default     = "87600h"
+}
+
+variable "ssh_allowed_cidrs" {
+  description = "CIDRs allowed to reach the SSH CA target on port 22. Access still requires a Vault-signed cert; restrict to your IP anyway."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "ssh_ca_instance_type" {
+  description = "EC2 instance type for the SSH CA target."
+  type        = string
+  default     = "t3.micro"
+}
+
+# =============================================================================
+# Act 8 — LDAP / Active Directory password rotation (off by default)
+# =============================================================================
+variable "enable_ldap" {
+  description = <<-EOT
+    Turn on Act 8: a Windows AD domain controller and Vault's LDAP secrets
+    engine rotating service-account passwords. Slow (~15 min bootstrap, t3.large)
+    so it is off by default. Requires ldap_admin_password, and an allowed CIDR
+    list that includes the HCP Vault egress IP (see ldap_allowed_cidrs).
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "ldap_admin_password" {
+  description = "AD Administrator password (also the Vault bind password). 12+ chars, must meet Windows complexity rules. Mark sensitive."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "ldap_domain" {
+  description = "AD domain to create, e.g. example.com."
+  type        = string
+  default     = "example.com"
+}
+
+variable "ldap_organization" {
+  description = "Organization display name for the directory."
+  type        = string
+  default     = "Example Organization"
+}
+
+variable "ldap_allowed_cidrs" {
+  description = "CIDRs allowed to reach LDAP/LDAPS. Defaults to db_allowed_cidrs (which already needs the HCP Vault egress IP)."
+  type        = list(string)
+  default     = null
+}
+
+variable "ldap_static_roles" {
+  description = "Vault static roles to create. The AD account is created by the bootstrap; the DN is derived from username + ldap_domain."
+  type = map(object({
+    username        = string
+    rotation_period = number
+  }))
+  default = {
+    "service-account-1" = {
+      username        = "svc-app1"
+      rotation_period = 120 # seconds; short so rotation is visible live
+    }
+    "service-account-2" = {
+      username        = "svc-app2"
+      rotation_period = 120
+    }
+  }
+}

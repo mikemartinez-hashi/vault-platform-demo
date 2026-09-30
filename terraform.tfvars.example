@@ -84,3 +84,15 @@ agentless_web_instance_type       = "t3.micro"
 # Binding creds. Let's Encrypt does not — leave these empty for LE.
 # acme_eab_kid = ""
 # acme_eab_key = ""
+
+# --- Act 7: SSH CA (default on) ---
+# enable_ssh_ca           = true
+# ssh_principal           = "demo-tech"
+# ssh_technician_cert_ttl = "1h"
+# ssh_allowed_cidrs       = ["<YOUR_PUBLIC_IP>/32"]
+
+# --- Act 8: AD password rotation (default OFF, ~15 min bootstrap) ---
+# Needs the HCP Vault egress IP in ldap_allowed_cidrs (or db_allowed_cidrs).
+# enable_ldap         = true
+# ldap_admin_password = ""   # REQUIRED when enabled, 12+ chars, mark sensitive
+# ldap_domain         = "example.com"
