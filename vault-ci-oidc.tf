@@ -24,6 +24,7 @@
 variable "github_owner" {
   type        = string
   description = "GitHub org or user that owns the demo repo, e.g. mikemartinez-hashi"
+  default = "mikemartinez-hashi"
 }
 
 variable "github_repo" {
