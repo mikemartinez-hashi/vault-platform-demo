@@ -40,7 +40,7 @@ variable "github_branch" {
 
 # JWT auth method pointed at GitHub's OIDC issuer.
 resource "vault_jwt_auth_backend" "github" {
-  path               = "jwt-github"
+  path               = "jwt-github-${var.customer_name}"
   type               = "jwt"
   description        = "GitHub Actions OIDC (${var.customer_name})"
   oidc_discovery_url = "https://token.actions.githubusercontent.com"
@@ -51,7 +51,7 @@ resource "vault_jwt_auth_backend" "github" {
 # in the demo: a token minted for any other repo or branch does not satisfy it.
 resource "vault_jwt_auth_backend_role" "ci" {
   backend   = vault_jwt_auth_backend.github.path
-  role_name = "github-actions"
+  role_name = "github-actions-${var.customer_name}"
   role_type = "jwt"
 
   user_claim      = "repository"
