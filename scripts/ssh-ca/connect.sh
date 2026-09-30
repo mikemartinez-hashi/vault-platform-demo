@@ -67,7 +67,7 @@ echo "  In production: technician logs in via OIDC/SAML/LDAP."
 echo "  Vault checks policy: is this person allowed to request"
 echo "  a cert for this role, this principal, this device class?"
 echo ""
-echo "  For this demo: using root token (simulates authenticated session)"
+echo "  For this demo: using whatever Vault session you are logged in with"
 echo ""
 
 # Generate a fresh keypair for this technician session
