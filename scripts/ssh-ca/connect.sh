@@ -96,15 +96,14 @@ echo "$SIGN_RESPONSE" | jq -r '.data.signed_key' > "$CERT_FILE"
 chmod 600 "$CERT_FILE"
 
 SERIAL=$(echo "$SIGN_RESPONSE" | jq -r '.data.serial_number // "n/a"')
-TTL=$(echo "$SIGN_RESPONSE" | jq -r '.lease_duration // "n/a"')
 
 echo "  Signed certificate issued."
 echo "  Serial:    ${SERIAL}"
-echo "  TTL:       ${TTL} seconds"
+echo "  (validity window is in the certificate details below)"
 echo ""
 echo "  Certificate details (ssh-keygen -L):"
 ssh-keygen -L -f "$CERT_FILE" 2>/dev/null \
-  | grep -E "Type:|Public key:|Signing CA:|Valid:|Principals:|Extensions:" \
+  | grep -E -A1 "Type:|Public key:|Signing CA:|Valid:|Principals:|Extensions:" | grep -v "^--$" \
   | sed 's/^/    /'
 echo ""
 echo "  [AUDIT] Vault has logged this cert issuance."
