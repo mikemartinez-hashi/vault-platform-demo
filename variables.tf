@@ -436,6 +436,12 @@ variable "ldap_admin_password" {
   default     = null
 }
 
+variable "ldap_instance_type" {
+  description = "EC2 type for the domain controller. t3.large (8 GiB) is the size the standalone demo was built and tested on. Smaller types (e.g. t3.medium, 4 GiB) may be needed if an org policy restricts instance types, but bootstrap may be slower or fail."
+  type        = string
+  default     = "t3.large"
+}
+
 variable "ldap_domain" {
   description = "AD domain to create, e.g. example.com."
   type        = string

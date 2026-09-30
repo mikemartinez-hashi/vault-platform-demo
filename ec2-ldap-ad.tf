@@ -5,7 +5,7 @@
 # the service accounts Vault will rotate. The bootstrap is a three-phase,
 # two-reboot PowerShell script (forest -> accounts + LDAPS cert -> LDAPS
 # verify) and takes roughly 15 minutes, which is why this act is off by
-# default. t3.large is the AD DS minimum.
+# default. The original demo treated t3.large as the AD DS minimum; see var.ldap_instance_type.
 #
 # Vault (HCP) reaches it over LDAPS on the Elastic IP, so ldap_allowed_cidrs
 # (default: db_allowed_cidrs) MUST include the HCP Vault egress IP.
@@ -47,7 +47,7 @@ resource "aws_instance" "ldap" {
   count = local.act8 ? 1 : 0
 
   ami                    = data.aws_ami.windows_2025.id
-  instance_type          = "t3.large" # AD DS minimum - do not go below this
+  instance_type          = var.ldap_instance_type
   subnet_id              = tolist(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = [aws_security_group.ldap[0].id]
   iam_instance_profile   = aws_iam_instance_profile.ssm.name

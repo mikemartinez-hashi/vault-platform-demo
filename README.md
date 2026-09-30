@@ -267,7 +267,7 @@ auth still gates access; restrict it to your IP anyway).
 
 ## Act 8 — Active Directory password rotation
 
-`enable_ldap` (default `false`). Promotes a Windows Server 2025 `t3.large` to a
+`enable_ldap` (default `false`). Promotes a Windows Server 2025 box (`ldap_instance_type`, default `t3.large`) to a
 domain controller for `ldap_domain`, creates `svc-app1` / `svc-app2`, and points
 Vault's LDAP secrets engine at it over **LDAPS** with static roles that rotate
 every `rotation_period` (default 120s). It is a Windows **Active Directory**
