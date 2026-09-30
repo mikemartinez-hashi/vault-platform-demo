@@ -30,6 +30,14 @@ locals {
   web_approle  = "web-agentless"
   web_policy   = "pki-web-agentless-${var.customer_name}"
 
+  # Act 6 — public CA via pki-external-ca. Inert unless enable_public_ca.
+  pki_ext_mount     = "pki_ext_${var.customer_name}"
+  acme_account_name = "${var.customer_name}-acme"
+  dns_provider_name = "${var.customer_name}-route53"
+  pub_pki_role      = "public-web-${var.customer_name}"
+  pub_approle       = "web-public-ca"
+  pub_policy        = "pki-public-${var.customer_name}"
+
   common_tags = {
     Environment = var.environment
     Owner       = var.owner

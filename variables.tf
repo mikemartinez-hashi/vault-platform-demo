@@ -325,3 +325,87 @@ variable "agentless_rotate_interval" {
   type        = string
   default     = "5min"
 }
+
+# =============================================================================
+# Act 6 — Public CA via the pki-external-ca secrets engine (Vault Ent 2.0.0+)
+#
+# Everything here is inert until enable_public_ca = true, so the existing
+# five-act demo applies unchanged if you leave it alone.
+# =============================================================================
+variable "enable_public_ca" {
+  description = <<-EOT
+    Turn on Act 6: a `pki-external-ca` mount that brokers ACME issuance from a
+    real public CA, with Vault auto-fulfilling DNS-01 challenges via Route53.
+    Requires public_ca_domain, route53_zone_id and acme_email to be set.
+    Confirmed available on HCP Vault Dedicated (Vault 2.0.3+ent, 2026-09-09).
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "public_ca_domain" {
+  description = <<-EOT
+    A domain you actually control, hosted in Route53 - e.g. "vault.example.com".
+    ACME proves control of this name, so demo.internal and the EC2
+    *.compute-1.amazonaws.com name will both fail. The Act 6 nginx vhost and
+    the Route53 A record are both built from this.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID containing public_ca_domain. Vault writes the DNS-01 TXT challenge records here."
+  type        = string
+  default     = ""
+}
+
+variable "acme_email" {
+  description = "Contact email registered with the ACME account (required by the CA for expiry notices)."
+  type        = string
+  default     = ""
+}
+
+variable "acme_directory_url" {
+  description = <<-EOT
+    ACME directory URL. Defaults to Let's Encrypt STAGING on purpose.
+
+    Production LE allows only 5 certificates per identical set of identifiers
+    per 7 days (refilling one per 34 hours), which a rotating demo will exhaust.
+    Staging has far higher limits but an untrusted chain, so you get the full
+    workflow without a padlock. Switch to production only for a one-shot issue:
+      https://acme-v02.api.letsencrypt.org/directory
+  EOT
+  type        = string
+  default     = "https://acme-staging-v02.api.letsencrypt.org/directory"
+}
+
+variable "acme_eab_kid" {
+  description = "External Account Binding key ID. Empty for Let's Encrypt; required by DigiCert / Sectigo / GlobalSign."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "acme_eab_key" {
+  description = "External Account Binding key, urlbase64-encoded. Empty for Let's Encrypt."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "public_cert_check_interval" {
+  description = <<-EOT
+    systemd timer interval for the public-CA renewal check. Public CAs issue
+    ~90-day certs, so this is a daily no-op check, NOT the 5-minute loop Act 5
+    uses. Do not shorten it - each real issuance burns CA rate limit.
+  EOT
+  type        = string
+  default     = "24h"
+}
+
+variable "public_cert_renew_threshold_seconds" {
+  description = "Re-order the public cert once it has less than this many seconds left. Default 30 days, the conventional threshold for a 90-day cert."
+  type        = number
+  default     = 2592000
+}

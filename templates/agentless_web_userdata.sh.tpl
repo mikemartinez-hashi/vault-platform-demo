@@ -101,3 +101,4 @@ systemctl enable --now nginx
 systemctl enable --now vault-cert-rotate.timer
 
 echo "Act 5 bootstrap complete. Timer: $(systemctl show -p NextElapseUSecRealtime --value vault-cert-rotate.timer)"
+${public_ca_block}

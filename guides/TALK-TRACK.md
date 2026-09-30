@@ -18,7 +18,7 @@ Set this once in your shell so every command below is copy-paste ready. Use the
 same value you set for `customer_name` in Terraform.
 
 ```bash
-export CUSTOMER="volante"          # <-- match your terraform customer_name
+export CUSTOMER="castlebio"          # <-- match your terraform customer_name
 export VAULT_ADDR="https://vault-demo-cluster-public-vault-b71960ee.491753e4.z1.hashicorp.cloud:8200"
 export VAULT_NAMESPACE="admin"
 # export VAULT_TOKEN=...         your admin token

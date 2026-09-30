@@ -1,0 +1,83 @@
+name: "Vault Secret Injection (OIDC — no stored secret)"
+
+# The Castle Biosciences variant of vault-inject-main.yml.
+#
+# Difference that matters: this workflow stores NOTHING in the repo. No
+# VAULT_ROLE_ID, no VAULT_SECRET_ID. GitHub mints an OIDC token for this run,
+# Vault validates it against GitHub and checks the repo / branch claims bound
+# on the role, then issues a token good for minutes.
+#
+# Requires (from `terraform output oidc_github_setup`) — repo VARIABLES only:
+#   VAULT_ADDR, VAULT_NAMESPACE, VAULT_JWT_PATH, VAULT_JWT_ROLE,
+#   VAULT_JWT_AUDIENCE, VAULT_KV_PATH, VAULT_KV_KEY, VAULT_PKI_ISSUE_PATH
+#
+# Repo SECRETS required: none. That is the demo.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write          # <-- lets GitHub mint the OIDC token. Without this, no auth.
+
+jobs:
+  vault-inject:
+    name: "Pull KV + issue PKI cert from Vault (OIDC)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Vault with GitHub OIDC
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ vars.VAULT_ADDR }}
+          namespace: ${{ vars.VAULT_NAMESPACE }}
+          method: jwt
+          path: ${{ vars.VAULT_JWT_PATH }}
+          role: ${{ vars.VAULT_JWT_ROLE }}
+          jwtGithubAudience: ${{ vars.VAULT_JWT_AUDIENCE }}
+          exportToken: true
+          secrets: |
+            ${{ vars.VAULT_KV_PATH }} ${{ vars.VAULT_KV_KEY }} | VAULT_SECRET ;
+
+      - name: Issue dynamic PKI certificate
+        id: dynamic
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_NAMESPACE: ${{ vars.VAULT_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          common_name="gha-runner.ci.demo.internal"
+          http=$(curl -s -o /tmp/vault_resp.json -w '%{http_code}' \
+            -X POST \
+            -H "X-Vault-Token: ${VAULT_TOKEN}" \
+            -H "X-Vault-Namespace: ${VAULT_NAMESPACE}" \
+            -H "Content-Type: application/json" \
+            -d "{\"common_name\":\"${common_name}\",\"ttl\":\"15m\"}" \
+            "${VAULT_ADDR}/v1/${{ vars.VAULT_PKI_ISSUE_PATH }}")
+          if [ "$http" != "200" ]; then
+            echo "::error::Vault returned HTTP $http issuing ${{ vars.VAULT_PKI_ISSUE_PATH }}"
+            cat /tmp/vault_resp.json; echo
+            exit 1
+          fi
+          serial=$(jq -r '.data.serial_number' /tmp/vault_resp.json)
+          expiry=$(jq -r '.data.expiration'   /tmp/vault_resp.json)
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+          echo "expiry=$expiry" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Vault injection — this run"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Auth method | JWT / GitHub OIDC |"
+            echo "| Repo secrets used | **none** |"
+            echo "| KV secret | retrieved (masked) |"
+            echo "| Cert serial | \`${{ steps.dynamic.outputs.serial }}\` |"
+            echo "| Cert expiry | \`${{ steps.dynamic.outputs.expiry }}\` |"
+            echo ""
+            echo "Re-run this workflow: the serial changes every time."
+          } >> "$GITHUB_STEP_SUMMARY"

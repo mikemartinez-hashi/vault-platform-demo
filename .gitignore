@@ -1,5 +1,5 @@
 # Terraform
-.terraform/
+.terraform*
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.*
@@ -16,6 +16,6 @@ terraform.tfvars
 # Terraform, so this is not needed for the pipeline.
 backend.tf
 
-# OS cruft
+# Random ignore
 .DS_Store
 *.pdf

@@ -62,3 +62,25 @@ agentless_cert_ttl                = "1h"
 agentless_renew_threshold_seconds = 2700   # re-issue with < 45 min of life left
 agentless_rotate_interval         = "5min" # how often the timer checks
 agentless_web_instance_type       = "t3.micro"
+
+# --- Act 6: public CA via pki-external-ca (OPTIONAL, Vault Ent 2.0.0+) ---
+# Off by default. Turning it on requires a domain you actually control in a
+# Route53 zone — ACME cannot validate .internal names or *.amazonaws.com.
+#
+# LICENSING: Vault 2.0.0 meters "PKI External CA certificate units" separately
+# from client count. Confirm the entitlement before demoing this into a deal.
+#
+# enable_public_ca   = true
+# public_ca_domain   = "vault-demo.example.com"   # a name you own
+# route53_zone_id    = "Z0123456789ABCDEFGHIJ"    # zone containing it
+# acme_email         = "you@example.com"
+#
+# Defaults to Let's Encrypt STAGING (untrusted chain, generous limits) so a
+# demo can't burn production quota. LE production allows only 5 certs per
+# identical identifier set per 7 days. For a real padlock, one-shot:
+# acme_directory_url = "https://acme-v02.api.letsencrypt.org/directory"
+#
+# Commercial CAs (DigiCert / Sectigo / GlobalSign) need External Account
+# Binding creds. Let's Encrypt does not — leave these empty for LE.
+# acme_eab_kid = ""
+# acme_eab_key = ""

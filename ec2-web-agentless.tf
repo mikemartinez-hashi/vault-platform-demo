@@ -62,9 +62,35 @@ resource "aws_instance" "web_agentless" {
       renew_threshold_seconds = var.agentless_renew_threshold_seconds
       cert_dir                = "/etc/vault-pki"
     })
+
+    # Act 6 is bolted onto this same instance as a second vhost. Empty string
+    # when enable_public_ca = false, so the rendered user_data is unchanged.
+    public_ca_block = local.act6 == 0 ? "" : templatefile("${path.module}/templates/agentless/public_ca_bootstrap.sh.tpl", {
+      pub_role_id                = vault_approle_auth_backend_role.web_public_ca[0].role_id
+      pub_secret_id              = vault_approle_auth_backend_role_secret_id.web_public_ca[0].secret_id
+      public_ca_domain           = var.public_ca_domain
+      public_cert_check_interval = var.public_cert_check_interval
+
+      public_cert_script = templatefile("${path.module}/templates/agentless/vault-public-cert.sh.tpl", {
+        vault_addr              = var.vault_addr
+        vault_namespace         = var.vault_namespace
+        approle_mount           = vault_auth_backend.approle.path
+        pki_ext_mount           = vault_mount.pki_ext[0].path
+        pub_pki_role            = local.pub_pki_role
+        public_ca_domain        = var.public_ca_domain
+        renew_threshold_seconds = var.public_cert_renew_threshold_seconds
+        cert_dir                = "/etc/vault-pki-public"
+      })
+    })
   })
 
-  depends_on = [vault_pki_secret_backend_role.web_agentless]
+  # Act 6's mount, role and DNS provider must exist before the instance boots
+  # and immediately tries to place an order.
+  depends_on = [
+    vault_pki_secret_backend_role.web_agentless,
+    vault_generic_endpoint.pub_role,
+    vault_generic_endpoint.dns_route53,
+  ]
 
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-agentless-web"

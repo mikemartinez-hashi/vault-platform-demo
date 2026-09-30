@@ -13,6 +13,7 @@ customizable per account with a single `customer_name` variable.
 | 3 | Secrets in your pipeline | GitHub Actions pulls a **KV** secret (+ issues a PKI cert) via AppRole, injects into a web server |
 | 4 | Certificate lifecycle, automated | Root→Intermediate **PKI** + **Vault Agent** on Windows MariaDB — cert/key rendered as plain files, `FLUSH SSL` in place |
 | 5 | Same PKI, **no agent** | Ubuntu + nginx — a `curl`/`jq` script on a **systemd timer** issues off the same intermediate and reloads nginx in place |
+| 6 | Certs from a **real public CA** *(optional)* | `pki-external-ca` engine — Vault holds the ACME account and fulfills DNS-01 in Route53; same agentless script shape, different trust root |
 
 ## The `customer_name` knob
 
@@ -40,6 +41,8 @@ vault-db.tf             Act 2 — RDS Postgres + database secrets engine
 vault-pki.tf            Act 4 (config) — Root→Intermediate CA, leaf roles, agent AppRole
 vault-ci.tf             Act 3 (config) — GitHub Actions AppRole, CI KV secret, CI policies
 vault-pki-agentless.tf  Act 5 (config) — nginx PKI role + narrow AppRole/policy (no agent)
+vault-pki-external-ca.tf Act 6 (config) — pki-external-ca mount, ACME account, Route53 DNS-01, role
+iam-route53-acme.tf     Act 6 (infra)  — scoped IAM user for Vault's DNS-01 + the A record
 
 ec2-ci-web.tf           Act 3 (infra) — Linux/Apache web server (CI-injected page)
 ec2-mysql-agent.tf      Act 4 (infra) — Windows MariaDB + Vault Agent
@@ -51,6 +54,8 @@ templates/
   vault-agent/agent-windows.hcl.tpl Vault Agent config (templates + FLUSH SSL hook)
   agentless_web_userdata.sh.tpl     Ubuntu: nginx + rotation script + systemd timer
   agentless/vault-cert-rotate.sh.tpl  the whole agentless mechanism, ~120 lines of bash
+  agentless/vault-public-cert.sh.tpl  Act 6 — the ACME order/poll/fetch flow
+  agentless/public_ca_bootstrap.sh.tpl Act 6 — second vhost, timer, first order
 
 .github/workflows/
   vault-inject-pr.yml     PR/dispatch → AppRole login, pull KV secret + issue PKI cert, PR comment + run summary
@@ -189,6 +194,55 @@ both for anything resembling a real deployment.
 cloud-init. In production you'd use AWS IAM auth (no static secret at all),
 response-wrapped secret-id delivery, or Vault Secrets Operator — the rest of the
 script is unchanged.
+
+## Act 6 — public CA certificates (optional, off by default)
+
+Acts 4 and 5 issue from an intermediate CA Vault holds. Act 6 is the other half
+of the PKI story: certificates from a **real external CA**, using the
+`pki-external-ca` secrets engine. Set `enable_public_ca = true` to turn it on;
+everything is `count`-gated so the five-act demo is byte-identical when it's off.
+
+**Verified on this stack (2026-09-09):** the engine mounts successfully on HCP
+Vault Dedicated running **2.0.3+ent**. It requires Vault **Enterprise 2.0.0+**.
+
+How it works — and why it stays agentless:
+
+1. Vault registers an ACME account with the CA (`config/acme-account/...`).
+   There is no CA-side signup for Let's Encrypt and no EAB; EAB credentials are
+   only needed for DigiCert / Sectigo / GlobalSign.
+2. Vault gets Route53 credentials scoped to **one hosted zone** and the two
+   actions ACME needs (`iam-route53-acme.tf`), so **Vault** fulfills the DNS-01
+   challenge. The host never solves a challenge or touches DNS.
+3. `/usr/local/bin/vault-public-cert.sh` runs the documented order flow —
+   `new-order` → poll `order/:id/status` → `fetch-cert` — and writes the same
+   three files Act 5 writes, into `/etc/vault-pki-public`. Same reload, no agent.
+4. It serves on a **second nginx vhost** on the Act 5 box, matched by
+   `server_name`, so one screen shows both trust roots: the internal CA cert on
+   the IP, the public CA cert on the real domain.
+
+### Three things to know before you turn it on
+
+- **You need a domain you control, in Route53.** ACME proves control of the
+  name. `demo.internal` and the EC2 `*.compute-1.amazonaws.com` name both fail.
+- **Public CA issuance cannot be demoed rotating.** Public certs run ~90 days,
+  and Let's Encrypt production allows **5 certificates per identical identifier
+  set per 7 days**, refilling one per 34 hours. The Act 6 timer runs **daily**
+  and no-ops. Keep Act 5's 15-minute loop as the "watch it rotate" moment; Act 6
+  is the "and it works the same against your real CA" moment. The default
+  directory URL is Let's Encrypt **staging** so a demo can't burn real quota.
+- **It meters separately.** Vault 2.0.0 introduced *PKI External CA certificate
+  units* as their own license utilization metric — not part of client count.
+  Confirm the entitlement before putting this in front of a customer.
+
+### Not yet run end to end
+
+The Terraform validates and both scripts pass `bash -n`, but **no `apply` has
+been run against a live domain**. The Vault provider has no native resources for
+this engine, so the mount config goes through `vault_generic_endpoint` against
+the documented API paths. The order-status polling is written defensively — it
+retries `fetch-cert` and accepts the first response containing a certificate
+rather than matching status strings — but the exact status vocabulary is
+unconfirmed. Expect to iterate on the first real apply.
 
 ## Cleanup
 

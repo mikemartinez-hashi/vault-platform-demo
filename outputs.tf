@@ -133,3 +133,30 @@ output "agentless_verify_hint" {
     cat /usr/local/bin/vault-cert-rotate.sh
   EOT
 }
+
+# ── Act 6 — Public CA via pki-external-ca (optional) ────────────────────────
+output "public_ca_url" {
+  description = "HTTPS URL served with the public CA certificate (Act 6). Empty unless enable_public_ca = true."
+  value       = var.enable_public_ca ? "https://${var.public_ca_domain}" : ""
+}
+
+output "public_ca_verify_hint" {
+  description = "Verify the public CA certificate (Act 6). Run on the Act 5/6 host via SSM."
+  value       = !var.enable_public_ca ? "Act 6 disabled (enable_public_ca = false)." : <<-EOT
+    # Did the order succeed?
+    tail -n 40 /var/log/vault-public-cert.log
+    systemctl list-timers vault-public-cert.timer
+
+    # Compare the two trust roots on the same box:
+    openssl x509 -in /etc/vault-pki/cert.pem        -noout -issuer   # your Vault intermediate
+    openssl x509 -in /etc/vault-pki-public/cert.pem -noout -issuer   # the external CA
+
+    # From the wire, by name (Act 6) vs by IP (Act 5)
+    echo | openssl s_client -connect ${var.public_ca_domain}:443 -servername ${var.public_ca_domain} 2>/dev/null \
+      | openssl x509 -noout -issuer -subject -dates
+
+    # Re-order on demand. NOTE: consumes CA rate limit - on Let's Encrypt
+    # production that is 5 per identical identifier set per 7 days.
+    sudo /usr/local/bin/vault-public-cert.sh --force
+  EOT
+}
