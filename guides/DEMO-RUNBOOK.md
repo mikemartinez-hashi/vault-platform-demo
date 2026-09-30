@@ -83,17 +83,23 @@ exists. Vault mints one that expires — less to steal, less to manage."
 
 ## Act 3 — GitHub Actions + KV injection (~6 min)
 
-Pre-req (once): repo secrets + variables set from `terraform output` (see README).
+Pre-req (once): set the 8 keys from the HCP Terraform output
+`github_repo_variables` as repo **Variables** (not Secrets). Repo secrets: none.
 
-1. **Open a PR** changing something trivial (e.g. a tag). GitHub Actions runs the
-   plan workflow: it authenticates to Vault with **AppRole**, pulls the KV secret,
-   issues a short-lived PKI cert, and posts the plan as a PR comment.
-   → "The pipeline never had a long-lived secret baked into it. It logged into
-   Vault, got exactly what it needed, and that's auditable."
+1. **Show the empty Secrets page first** (repo → Settings → Secrets and variables →
+   Actions). → "Nothing here. No token, no role ID, no password."
+2. **Show the role binding:** run the `ci_verify_command` output
+   (`vault read auth/jwt-github-<customer>/role/github-actions-<customer>`) and
+   point at `bound_claims`. → "Vault only accepts a token from this repo, on this
+   branch. A token minted for any other repo is valid GitHub-signed JWT and Vault
+   still rejects it."
+3. **Push to `main`** (or **Run workflow**). One workflow, **Vault Secret Injection
+   (GitHub OIDC)**, runs every time: GitHub mints a per-run token, Vault validates
+   it, the job reads the KV secret and issues a short-lived PKI cert. Open the run
+   Summary. → "The pipeline never had a long-lived secret. Re-run it: the serial
+   changes every time."
 
-2. **Merge to main.** The apply workflow pulls a *fresh* secret + cert and applies.
-
-3. **Open the CI web page:**
+4. **Open the CI web page:**
    ```bash
    terraform output ci_web_url
    ```

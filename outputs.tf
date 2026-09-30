@@ -37,36 +37,34 @@ output "ci_web_url" {
   value       = "http://${aws_instance.ci_web.public_dns}"
 }
 
-# AppRole credentials for the GitHub Actions workflow (repo secrets
-# VAULT_ROLE_ID / VAULT_SECRET_ID).
-#
-# DEMO CONVENIENCE: both are exposed in plaintext so they render in the HCP
-# Terraform UI without the "sensitive" mask. secret_id is a real credential and
-# is provider-marked sensitive, so nonsensitive() is required to un-mask it —
-# this ALSO stores it readable in state and visible to anyone with workspace
-# read access. Fine for a throwaway demo AppRole; do NOT do this for real creds.
-# To re-hide it, delete ci_secret_id (or drop nonsensitive() and add
-# `sensitive = true`) and read it with `terraform output -raw ci_secret_id`.
-output "ci_role_id" {
-  description = "GitHub Actions AppRole Role ID (repo secret VAULT_ROLE_ID)."
-  value       = vault_approle_auth_backend_role.ci.role_id
-}
-
-output "ci_secret_id" {
-  description = "GitHub Actions AppRole Secret ID (repo secret VAULT_SECRET_ID). Un-masked for demo visibility."
-  value       = nonsensitive(vault_approle_auth_backend_role_secret_id.ci.secret_id)
-}
-
+# Paste every key below into GitHub repo VARIABLES (Settings > Secrets and
+# variables > Actions > *Variables* tab). No repo secrets are needed.
 output "github_repo_variables" {
-  description = "Paste these into GitHub repo VARIABLES so the workflow YAML stays customer-agnostic."
+  description = "ALL 8 GitHub repo VARIABLES the workflow needs. Repo secrets: none."
   value = {
     VAULT_ADDR           = var.vault_addr
     VAULT_NAMESPACE      = var.vault_namespace
-    VAULT_APPROLE_PATH   = vault_auth_backend.approle.path
+    VAULT_JWT_PATH       = vault_jwt_auth_backend.github.path
+    VAULT_JWT_ROLE       = vault_jwt_auth_backend_role.ci.role_name
+    VAULT_JWT_AUDIENCE   = local.ci_jwt_audience
     VAULT_KV_PATH        = "${vault_mount.ci_kv.path}/data/${local.ci_kv_path}"
     VAULT_KV_KEY         = "api_key"
     VAULT_PKI_ISSUE_PATH = "${vault_mount.pki_int.path}/issue/${local.ci_pki_role}"
   }
+}
+
+output "ci_bound_claims" {
+  description = "What Vault requires of the GitHub OIDC token. Read this aloud in the demo."
+  value = {
+    repository = "${var.github_owner}/${var.github_repo}"
+    ref        = "refs/heads/${var.github_branch}"
+    audience   = local.ci_jwt_audience
+  }
+}
+
+output "ci_verify_command" {
+  description = "Show the role binding live: run with the Vault CLI."
+  value       = "vault read auth/${vault_jwt_auth_backend.github.path}/role/${vault_jwt_auth_backend_role.ci.role_name}"
 }
 
 # ── Act 4 — PKI + Vault Agent (Windows MariaDB) ─────────────────────────────

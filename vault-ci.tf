@@ -1,13 +1,13 @@
 # ===========================================================================
-# ACT 3 — GitHub Actions + KV injection
-# One AppRole login lets the GitHub Actions pipeline both (a) read a static KV
-# secret and (b) issue a fresh, short-lived PKI cert (Act 4's intermediate).
-# Terraform provisions the AppRole and OUTPUTS its role_id / secret_id so you
-# paste them into GitHub repo secrets — no separate setup script needed.
+# ACT 3 — GitHub Actions + Vault, with NO stored credential
+# GitHub mints a signed OIDC token per workflow run; Vault validates it against
+# GitHub's issuer and checks the repository + branch claims bound on the role.
+# Nothing Vault-related lives in the repo (no token, role_id or secret_id).
+# One login lets the pipeline both (a) read a static KV secret and (b) issue a
+# fresh short-lived PKI cert off Act 4's intermediate.
 #
-# The workflow lives in .github/workflows/. It reads the KV path, PKI issue
-# path, and AppRole mount from GitHub *repo variables* (Terraform outputs the
-# exact values) so the YAML stays customer-agnostic.
+# The workflow (.github/workflows/vault-inject.yml) reads every path from GitHub
+# repo *variables*; `github_repo_variables` (outputs.tf) prints the full set.
 # ===========================================================================
 
 # Dedicated KV mount for the CI secret (avoids collision with HCP's "secret/").
@@ -47,19 +47,32 @@ resource "vault_policy" "ci_pki" {
   EOT
 }
 
-# The github-actions AppRole carries BOTH policies — one login, static + dynamic.
-# Reuses the customer AppRole backend from vault-pki.tf.
-resource "vault_approle_auth_backend_role" "ci" {
-  backend        = vault_auth_backend.approle.path
-  role_name      = local.ci_approle
-  token_policies = [vault_policy.ci_kv.name, vault_policy.ci_pki.name]
-  token_ttl      = 3600
-  token_max_ttl  = 14400
-  secret_id_ttl  = 0
-  bind_secret_id = true
+# JWT auth method pointed at GitHub's OIDC issuer.
+resource "vault_jwt_auth_backend" "github" {
+  path               = "jwt-github-${var.customer_name}"
+  type               = "jwt"
+  description        = "GitHub Actions OIDC (${var.customer_name})"
+  oidc_discovery_url = "https://token.actions.githubusercontent.com"
+  bound_issuer       = "https://token.actions.githubusercontent.com"
 }
 
-resource "vault_approle_auth_backend_role_secret_id" "ci" {
-  backend   = vault_auth_backend.approle.path
-  role_name = vault_approle_auth_backend_role.ci.role_name
+# bound_claims is the whole security story: a token minted for any other repo or
+# branch is perfectly valid GitHub-signed JWT, and Vault still rejects it.
+resource "vault_jwt_auth_backend_role" "ci" {
+  backend   = vault_jwt_auth_backend.github.path
+  role_name = local.ci_jwt_role
+  role_type = "jwt"
+
+  user_claim      = "repository"
+  bound_audiences = [local.ci_jwt_audience]
+
+  bound_claims_type = "string"
+  bound_claims = {
+    repository = "${var.github_owner}/${var.github_repo}"
+    ref        = "refs/heads/${var.github_branch}"
+  }
+
+  token_policies = [vault_policy.ci_kv.name, vault_policy.ci_pki.name]
+  token_ttl      = 900
+  token_max_ttl  = 1800
 }

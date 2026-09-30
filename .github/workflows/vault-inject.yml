@@ -1,0 +1,129 @@
+name: "Vault Secret Injection (GitHub OIDC)"
+
+# Authenticates to Vault using GitHub's native OIDC token. Nothing Vault-related
+# is stored in this repository: no token, no role_id, no secret_id.
+#
+# GitHub mints a signed token for this run. Vault validates the signature
+# against GitHub's published keys, checks the repository and branch claims
+# bound on the role, and issues a Vault token good for minutes.
+#
+# Requires (from the HCP Terraform output `github_repo_variables`) — repo VARIABLES only:
+#   VAULT_ADDR, VAULT_NAMESPACE, VAULT_JWT_PATH, VAULT_JWT_ROLE,
+#   VAULT_JWT_AUDIENCE, VAULT_KV_PATH, VAULT_KV_KEY, VAULT_PKI_ISSUE_PATH
+#
+# Repo SECRETS required: none. That is the demo.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write          # <-- lets GitHub mint the OIDC token. Without this, no auth.
+
+jobs:
+  vault-inject:
+    name: "Pull KV + issue PKI cert from Vault (OIDC)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Vault with GitHub OIDC
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ vars.VAULT_ADDR }}
+          namespace: ${{ vars.VAULT_NAMESPACE }}
+          method: jwt
+          path: ${{ vars.VAULT_JWT_PATH }}
+          role: ${{ vars.VAULT_JWT_ROLE }}
+          jwtGithubAudience: ${{ vars.VAULT_JWT_AUDIENCE }}
+          exportToken: true
+          secrets: |
+            ${{ vars.VAULT_KV_PATH }} ${{ vars.VAULT_KV_KEY }} | VAULT_SECRET ;
+
+      - name: Prove the KV secret arrived (without exposing it)
+        id: proof
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_NAMESPACE: ${{ vars.VAULT_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          # VAULT_SECRET was injected into the environment by vault-action.
+          # GitHub masks the value itself in logs — that masking is the point,
+          # so instead of printing it we print evidence it is the right value:
+          # a digest the presenter can reproduce live from the CLI.
+          len=${#VAULT_SECRET}
+          digest=$(printf '%s' "$VAULT_SECRET" | sha256sum | cut -d' ' -f1)
+
+          # KV-v2 metadata: which version the pipeline actually read.
+          meta_path=$(printf '%s' "${{ vars.VAULT_KV_PATH }}" | sed 's#/data/#/metadata/#')
+          ver="unknown"; created="unknown"
+          if curl -sf -H "X-Vault-Token: ${VAULT_TOKEN}" \
+                  -H "X-Vault-Namespace: ${VAULT_NAMESPACE}" \
+                  "${VAULT_ADDR}/v1/${meta_path}" -o /tmp/kv_meta.json; then
+            ver=$(jq -r '.data.current_version // "unknown"' /tmp/kv_meta.json)
+            created=$(jq -r --arg v "$ver" '.data.versions[$v].created_time // "unknown"' /tmp/kv_meta.json)
+          fi
+
+          echo "bytes received : $len"
+          echo "sha256         : $digest"
+          echo "kv version     : $ver (created $created)"
+
+          {
+            echo "len=$len"
+            echo "digest=$digest"
+            echo "kv_version=$ver"
+            echo "kv_created=$created"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Issue dynamic PKI certificate
+        id: dynamic
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_NAMESPACE: ${{ vars.VAULT_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          common_name="gha-runner.ci.demo.internal"
+          http=$(curl -s -o /tmp/vault_resp.json -w '%{http_code}' \
+            -X POST \
+            -H "X-Vault-Token: ${VAULT_TOKEN}" \
+            -H "X-Vault-Namespace: ${VAULT_NAMESPACE}" \
+            -H "Content-Type: application/json" \
+            -d "{\"common_name\":\"${common_name}\",\"ttl\":\"15m\"}" \
+            "${VAULT_ADDR}/v1/${{ vars.VAULT_PKI_ISSUE_PATH }}")
+          if [ "$http" != "200" ]; then
+            echo "::error::Vault returned HTTP $http issuing ${{ vars.VAULT_PKI_ISSUE_PATH }}"
+            cat /tmp/vault_resp.json; echo
+            exit 1
+          fi
+          serial=$(jq -r '.data.serial_number' /tmp/vault_resp.json)
+          expiry=$(jq -r '.data.expiration'   /tmp/vault_resp.json)
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+          echo "expiry=$(date -u -d "@${expiry}" "+%Y-%m-%d %H:%M:%S UTC")" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          kv_ref=$(printf '%s' "${{ vars.VAULT_KV_PATH }}" | sed 's#/data/#/#')
+          {
+            echo "### Vault injection — this run"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Auth method | JWT / GitHub OIDC |"
+            echo "| Repo secrets used | **none** |"
+            echo "| KV secret | retrieved — \`${{ steps.proof.outputs.len }}\` bytes, KV version \`${{ steps.proof.outputs.kv_version }}\` |"
+            echo "| KV value SHA-256 | \`${{ steps.proof.outputs.digest }}\` |"
+            echo "| Secret version created | \`${{ steps.proof.outputs.kv_created }}\` |"
+            echo "| Cert serial | \`${{ steps.dynamic.outputs.serial }}\` |"
+            echo "| Cert expiry | \`${{ steps.dynamic.outputs.expiry }}\` |"
+            echo ""
+            echo "The secret value is deliberately **not** printed — GitHub masks it because"
+            echo "vault-action registers it as a secret. The SHA-256 above is reproducible"
+            echo "from the CLI, which proves the value without putting it in a retained log:"
+            echo ""
+            echo "\`\`\`"
+            echo "vault kv get -field=api_key ${kv_ref} | tr -d '\\n' | sha256sum"
+            echo "\`\`\`"
+            echo ""
+            echo "Re-run this workflow: the cert serial changes every time, the digest does not."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -10,12 +10,13 @@ locals {
   # reading these paths from GitHub *repo variables* (Terraform outputs the exact
   # values to paste). A dedicated KV mount avoids colliding with any pre-existing
   # HCP Vault "secret/" mount.
-  ci_kv_mount   = "ci_${var.customer_name}"
-  ci_kv_path    = "github-actions/demo"
-  ci_approle    = "github-actions-${var.customer_name}"
-  ci_kv_policy  = "${var.customer_name}-ci-kv"
-  ci_pki_policy = "${var.customer_name}-ci-pki"
-  ci_pki_role   = "github-actions"
+  ci_kv_mount     = "ci_${var.customer_name}"
+  ci_kv_path      = "github-actions/demo"
+  ci_jwt_role     = "github-actions-${var.customer_name}"
+  ci_jwt_audience = "https://github.com/${var.github_owner}"
+  ci_kv_policy    = "${var.customer_name}-ci-kv"
+  ci_pki_policy   = "${var.customer_name}-ci-pki"
+  ci_pki_role     = "github-actions"
 
   # Act 4 — PKI hierarchy + Vault Agent.
   pki_root_mount = "pki_${var.customer_name}"

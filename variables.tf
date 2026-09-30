@@ -176,6 +176,24 @@ variable "ci_kv_secret_value" {
   # sensitive   = true
 }
 
+variable "github_owner" {
+  description = "GitHub user/org that owns the demo repo. Part of the claim Vault binds the CI role to."
+  type        = string
+  default     = "mikemartinez-hashi"
+}
+
+variable "github_repo" {
+  description = "Repo name only. Vault only accepts OIDC tokens minted for <github_owner>/<github_repo>."
+  type        = string
+  default     = "vault-platform-demo"
+}
+
+variable "github_branch" {
+  description = "Branch allowed to authenticate to Vault. Must match the branch the workflow runs on."
+  type        = string
+  default     = "main"
+}
+
 variable "ci_web_instance_type" {
   description = "EC2 instance type for the CI-injected Linux web server."
   type        = string

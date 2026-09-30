@@ -32,7 +32,8 @@ export VAULT_NAMESPACE="admin"
 | Database engine (Act 2)         | `database_${CUSTOMER}`, role `${CUSTOMER}-role` |
 | CI KV mount (Act 3)             | `ci_${CUSTOMER}`, path `github-actions/demo`    |
 | AppRole auth mount (Act 3/4)    | `approle_${CUSTOMER}`                           |
-| CI AppRole role (Act 3)         | `github-actions-${CUSTOMER}`                    |
+| CI JWT auth mount (Act 3)       | `jwt-github-${CUSTOMER}`                        |
+| CI JWT role (Act 3)             | `github-actions-${CUSTOMER}`                    |
 | CI policies (Act 3)             | `${CUSTOMER}-ci-kv`, `${CUSTOMER}-ci-pki`       |
 | PKI root / intermediate (Act 4) | `pki_${CUSTOMER}` / `pki_int_${CUSTOMER}`       |
 | MariaDB PKI role (Act 4)        | `mysql-role-${CUSTOMER}`                        |
@@ -203,23 +204,24 @@ pipeline gets a secret without ever storing one."
 
 1. **Secrets** → **`ci_${CUSTOMER}`** → **`github-actions/demo`**. "This is the
    only place the CI secret lives. GitHub never holds it."
-2. **Access** → **Authentication Methods** → **`approle_${CUSTOMER}`** →
-   **`github-actions-${CUSTOMER}`**. "AppRole is a machine identity. The pipeline
-   logs in with a Role ID and a Secret ID, gets a short-lived token, and that is it."
+2. **Access** → **Authentication Methods** → **`jwt-github-${CUSTOMER}`** →
+   **`github-actions-${CUSTOMER}`**. "GitHub signs a token for every workflow run.
+   Vault checks the signature against GitHub, then checks the claims bound here:
+   this repository, this branch. No Role ID, no Secret ID, nothing stored."
 3. **Policies** → show **`${CUSTOMER}-ci-kv`** and **`${CUSTOMER}-ci-pki`**. "One
    login, two capabilities: read this KV secret, and issue a certificate. Nothing else."
 
 ### Generate it live (UI)
 
-1. On the **`github-actions-${CUSTOMER}`** AppRole page, show the **Role ID**, and
-   click **Generate SecretID**. "These are what we hand the pipeline, as GitHub
-   repo secrets. Terraform even printed them for us to paste."
-2. Switch to the **GitHub repo → Actions**. Run **Vault Secret Injection** (open a
-   PR, or click **Run workflow**). Open the run and show the **Summary**: the
-   pipeline authenticated with AppRole, pulled the KV secret (value masked), and
-   issued a fresh PKI certificate with its serial and expiry. On a PR, the same
-   proof posts as a **PR comment**. "The pipeline authenticated to Vault, pulled
-   exactly what it needed, held no long-lived secret, and it is all auditable."
+1. In the **GitHub repo → Settings → Secrets and variables → Actions**, show the
+   **Secrets** tab first: empty. "Nothing Vault-related is stored here. The
+   Variables tab is just addresses and paths."
+2. Switch to **Actions**. Run **Vault Secret Injection (GitHub OIDC)** (push to
+   `main`, or click **Run workflow**). Open the run and show the **Summary**: the
+   pipeline authenticated with GitHub OIDC, pulled the KV secret (value masked,
+   SHA-256 shown), and issued a fresh PKI certificate with its serial and expiry.
+   "The pipeline authenticated to Vault, pulled exactly what it needed, held no
+   long-lived secret, and it is all auditable."
 3. Run it again. "The certificate serial and expiry change every time. Each one is
    short-lived and expires on its own. Nothing is stored in the repo or the runner."
 4. (Optional) Show the deployed **`ci_web`** page from your apply
@@ -232,23 +234,19 @@ pipeline gets a secret without ever storing one."
 
 ### Do it in the CLI
 
-This is exactly what the workflow does, by hand:
+The workflow's login cannot be replayed by hand (the JWT only exists inside a
+GitHub run), but the trust relationship and its boundary can be shown:
 
 ```bash
-# 1. The pipeline's machine login
-ROLE_ID=$(vault read -field=role_id auth/approle_${CUSTOMER}/role/github-actions-${CUSTOMER}/role-id)
-SECRET_ID=$(vault write -f -field=secret_id auth/approle_${CUSTOMER}/role/github-actions-${CUSTOMER}/secret-id)
-CI_TOKEN=$(vault write -field=token auth/approle_${CUSTOMER}/login role_id="$ROLE_ID" secret_id="$SECRET_ID")
+# 1. The role binding: what Vault requires of GitHub's token
+vault read auth/jwt-github-${CUSTOMER}/role/github-actions-${CUSTOMER}
 
-# 2. With ONLY that token, read the KV secret...
-VAULT_TOKEN="$CI_TOKEN" vault kv get ci_${CUSTOMER}/github-actions/demo
+# 2. What that login is allowed to do: two policies, nothing else
+vault policy read ${CUSTOMER}-ci-kv
+vault policy read ${CUSTOMER}-ci-pki
 
-# 3. ...and issue a short-lived cert. Same token, both jobs.
-VAULT_TOKEN="$CI_TOKEN" vault write pki_int_${CUSTOMER}/issue/github-actions \
-  common_name=gha-runner.ci.demo.internal ttl=15m
-
-# 4. Prove the boundary: that token can do nothing else
-VAULT_TOKEN="$CI_TOKEN" vault kv get ${CUSTOMER}-kv/app/config   # DENIED
+# 3. Reproduce the SHA-256 the run summary printed, proving the value
+vault kv get -field=api_key ci_${CUSTOMER}/github-actions/demo | tr -d '\n' | sha256sum
 ```
 
 **Land it:** "The pipeline never held a long-lived secret. It logged in, got a
@@ -344,7 +342,7 @@ compliance teams need that."
    manages the audit backend, so this is the portal, not a local file. On
    self-managed Vault you enable a file or syslog audit device directly.)
 2. Point at entries from the last 30 minutes: the denied KV read, the dynamic
-   database credential, the AppRole pipeline login, the certificate issuance.
+   database credential, the GitHub OIDC pipeline login, the certificate issuance.
    "Every request and response, tamper-evident. One identity model, one audit
    trail, across secrets, pipelines, and certificates."
 

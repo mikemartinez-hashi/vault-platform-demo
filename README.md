@@ -10,7 +10,7 @@ customizable per account with a single `customer_name` variable.
 |-----|-------|-----------|
 | 1 | "Your password manager, but better" | KV-v2 + userpass + least-privilege policy |
 | 2 | The differentiator: dynamic secrets | Database engine → RDS Postgres |
-| 3 | Secrets in your pipeline | GitHub Actions pulls a **KV** secret (+ issues a PKI cert) via AppRole, injects into a web server |
+| 3 | Secrets in your pipeline | GitHub Actions authenticates with **OIDC (no stored secret)**, pulls a **KV** secret and issues a PKI cert |
 | 4 | Certificate lifecycle, automated | Root→Intermediate **PKI** + **Vault Agent** on Windows MariaDB — cert/key rendered as plain files, `FLUSH SSL` in place |
 | 5 | Same PKI, **no agent** | Ubuntu + nginx — a `curl`/`jq` script on a **systemd timer** issues off the same intermediate and reloads nginx in place |
 | 6 | Certs from a **real public CA** *(optional)* | `pki-external-ca` engine — Vault holds the ACME account and fulfills DNS-01 in Route53; same agentless script shape, different trust root |
@@ -39,7 +39,7 @@ outputs.tf              paths, URLs, and the exact GitHub repo secrets/variables
 vault-kv.tf             Act 1 — KV + userpass + policy
 vault-db.tf             Act 2 — RDS Postgres + database secrets engine
 vault-pki.tf            Act 4 (config) — Root→Intermediate CA, leaf roles, agent AppRole
-vault-ci.tf             Act 3 (config) — GitHub Actions AppRole, CI KV secret, CI policies
+vault-ci.tf             Act 3 (config) — GitHub OIDC (JWT) auth, CI KV secret, CI policies
 vault-pki-agentless.tf  Act 5 (config) — nginx PKI role + narrow AppRole/policy (no agent)
 vault-pki-external-ca.tf Act 6 (config) — pki-external-ca mount, ACME account, Route53 DNS-01, role
 iam-route53-acme.tf     Act 6 (infra)  — scoped IAM user for Vault's DNS-01 + the A record
@@ -58,8 +58,7 @@ templates/
   agentless/public_ca_bootstrap.sh.tpl Act 6 — second vhost, timer, first order
 
 .github/workflows/
-  vault-inject-pr.yml     PR/dispatch → AppRole login, pull KV secret + issue PKI cert, PR comment + run summary
-  vault-inject-main.yml   merge/dispatch → same, renders proof to the run summary (no Terraform, no infra changes)
+  vault-inject.yml   push to main / dispatch → GitHub OIDC login, pull KV secret + issue PKI cert, proof in run summary
 
 backend.tf.example        cloud{} block — only if you want CLI-driven remote applies (not used by the pipeline)
 terraform.tfvars.example
@@ -127,25 +126,24 @@ URLs and the Vault Agent config, not for authentication.
 > (the `vault_database_secret_backend_connection`) fails at apply — Vault can't
 > reach the DB to verify. Add your own IP too for direct `psql`. Never leave `0.0.0.0/0`.
 
-### Wiring up Act 3 (GitHub Actions)
+### Wiring up Act 3 (GitHub Actions, OIDC)
 
-The workflows authenticate to Vault with AppRole, pull the KV secret, and issue a
-PKI cert. They do **not** run Terraform or touch infrastructure, so the only setup
-is pasting Vault values into the GitHub repo. After the first apply,
-`terraform output ci_role_id`, `terraform output ci_secret_id`, and
-`terraform output github_repo_variables` print the exact values (the AppRole
-outputs are un-masked so they also show in the HCP Terraform UI — see the note in
-`outputs.tf`):
+The pipeline authenticates with GitHub's OIDC token, so **no repo secrets are
+needed**. After the HCP Terraform apply, open the workspace **Outputs** tab and
+copy `github_repo_variables` — all 8 keys — into the GitHub repo under
+*Settings → Secrets and variables → Actions → **Variables***:
 
-- **Repo secrets:** `VAULT_ROLE_ID`, `VAULT_SECRET_ID`
-- **Repo variables:** `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_APPROLE_PATH`,
-  `VAULT_KV_PATH`, `VAULT_KV_KEY`, `VAULT_PKI_ISSUE_PATH`
+`VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_JWT_PATH`, `VAULT_JWT_ROLE`,
+`VAULT_JWT_AUDIENCE`, `VAULT_KV_PATH`, `VAULT_KV_KEY`, `VAULT_PKI_ISSUE_PATH`
 
-The workflow YAML reads the paths from repo **variables**, so it stays
-customer-agnostic — no edits when you change `customer_name`. Trigger it by
-opening a PR, merging to `main`, or **Run workflow** (workflow_dispatch) from the
-Actions tab. The `ci_web` page is deployed by your `terraform apply`; the pipeline
-proves the live Vault pull in its run summary and PR comment.
+Vault only accepts tokens minted for `<github_owner>/<github_repo>` on
+`github_branch` (defaults: `mikemartinez-hashi/vault-platform-demo`, `main`) —
+override those workspace variables if your repo differs. `ci_bound_claims` and
+`ci_verify_command` print the binding for the demo.
+
+One workflow, `vault-inject.yml`, runs on every push to `main` (or **Run
+workflow**). It does not run Terraform or touch infrastructure; the proof is in
+the run summary.
 
 ## Act 4 — how the Windows MariaDB / Vault Agent piece works
 
