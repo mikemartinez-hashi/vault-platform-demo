@@ -34,6 +34,10 @@ resource "vault_policy" "ci_kv" {
     path "${vault_mount.ci_kv.path}/data/${local.ci_kv_path}" {
       capabilities = ["read"]
     }
+    # Lets the pipeline report which KV version it read (shown in the run summary).
+    path "${vault_mount.ci_kv.path}/metadata/${local.ci_kv_path}" {
+      capabilities = ["read"]
+    }
   EOT
 }
 
