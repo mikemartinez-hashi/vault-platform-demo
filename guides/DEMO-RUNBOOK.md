@@ -81,7 +81,7 @@ exists. Vault mints one that expires — less to steal, less to manage."
 
 ---
 
-## Act 3 — GitHub Actions + KV injection (~6 min)
+## Act 3 — GitHub Actions + Vault (OIDC) (~6 min)
 
 Pre-req (once): set the 8 keys from the HCP Terraform output
 `github_repo_variables` as repo **Variables** (not Secrets). Repo secrets: none.
@@ -99,13 +99,9 @@ Pre-req (once): set the 8 keys from the HCP Terraform output
    Summary. → "The pipeline never had a long-lived secret. Re-run it: the serial
    changes every time."
 
-4. **Open the CI web page:**
-   ```bash
-   terraform output ci_web_url
-   ```
-   → Shows the injected KV value + the dynamic cert's CN/serial/expiry, tagged
-   with the exact GitHub run. Re-run the pipeline → serial/expiry change every
-   time. "Every deploy pulls fresh, short-lived secrets. Nothing sits in the repo."
+4. **Tie it to Act 1:** edit `<customer>-kv/app/config` (write a new `api_key`; `kv patch` keeps the other fields), re-run
+   the workflow. The run summary shows the new KV version and a new SHA-256.
+   → "Same secret, same store. Change it once in Vault and the pipeline picks it up."
 
 ---
 

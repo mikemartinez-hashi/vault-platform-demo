@@ -6,12 +6,11 @@ locals {
   app_policy  = "${var.customer_name}-app"        # Act 1 least-priv policy
   db_role     = "${var.customer_name}-role"       # Act 2 dynamic DB role
 
-  # Act 3 — GitHub Actions. The static workflow YAML stays customer-agnostic by
-  # reading these paths from GitHub *repo variables* (Terraform outputs the exact
-  # values to paste). A dedicated KV mount avoids colliding with any pre-existing
-  # HCP Vault "secret/" mount.
-  ci_kv_mount     = "ci_${var.customer_name}"
-  ci_kv_path      = "github-actions/demo"
+  # Act 3 — GitHub Actions. The workflow YAML stays customer-agnostic by reading
+  # these paths from GitHub *repo variables* (Terraform outputs the exact values).
+  # The pipeline reads the SAME secret Act 1 stores (kv mount, app/config), so
+  # editing it live in Act 1 is what the next pipeline run picks up.
+  ci_kv_path      = "app/config"
   ci_jwt_role     = "github-actions-${var.customer_name}"
   ci_jwt_audience = "https://github.com/${var.github_owner}"
   ci_kv_policy    = "${var.customer_name}-ci-kv"
@@ -60,6 +59,21 @@ locals {
     ManagedBy   = "terraform"
     Demo        = "vault-platform-demo"
   }
+}
+
+# Ubuntu 24.04 base AMI, shared by Act 5 (nginx) and Act 7 (SSH CA target).
+data "aws_ami" "ubuntu_2404" {
+  for_each = toset(["amd64"])
+  filter {
+    name   = "name"
+    values = [format("hc-base-ubuntu-2404-%s-*", each.value)]
+  }
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+  most_recent = true
+  owners      = ["888995627335"] # ami-prod account
 }
 
 # Shared AWS networking + SSM plumbing (used by both EC2 instances).

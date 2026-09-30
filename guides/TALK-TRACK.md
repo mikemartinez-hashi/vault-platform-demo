@@ -30,7 +30,7 @@ export VAULT_NAMESPACE="admin"
 | App policy (Act 1)              | `${CUSTOMER}-app`                               |
 | Userpass user (Act 1)           | `appuser`                                       |
 | Database engine (Act 2)         | `database_${CUSTOMER}`, role `${CUSTOMER}-role` |
-| CI KV mount (Act 3)             | `ci_${CUSTOMER}`, path `github-actions/demo`    |
+| CI secret (Act 3)               | `${CUSTOMER}-kv`, path `app/config` (same as Act 1) |
 | AppRole auth mount (Act 3/4)    | `approle_${CUSTOMER}`                           |
 | CI JWT auth mount (Act 3)       | `jwt-github-${CUSTOMER}`                        |
 | CI JWT role (Act 3)             | `github-actions-${CUSTOMER}`                    |
@@ -46,7 +46,6 @@ Grab the live values before the call:
 cd Demos/vault-platform-demo
 terraform output                      # paths, URLs
 terraform output -raw db_host
-terraform output ci_web_url
 terraform output -raw mysql_instance_id
 ```
 
@@ -202,8 +201,8 @@ pipeline gets a secret without ever storing one."
 
 ### Show it's set up (UI)
 
-1. **Secrets** → **`ci_${CUSTOMER}`** → **`github-actions/demo`**. "This is the
-   only place the CI secret lives. GitHub never holds it."
+1. **Secrets** → **`${CUSTOMER}-kv`** → **`app/config`**. "This is the same secret
+   from the first act, and the only place it lives. GitHub never holds it."
 2. **Access** → **Authentication Methods** → **`jwt-github-${CUSTOMER}`** →
    **`github-actions-${CUSTOMER}`**. "GitHub signs a token for every workflow run.
    Vault checks the signature against GitHub, then checks the claims bound here:
@@ -224,9 +223,9 @@ pipeline gets a secret without ever storing one."
    long-lived secret, and it is all auditable."
 3. Run it again. "The certificate serial and expiry change every time. Each one is
    short-lived and expires on its own. Nothing is stored in the repo or the runner."
-4. (Optional) Show the deployed **`ci_web`** page from your apply
-   (`terraform output ci_web_url`) as the rendered end state: the injected KV value
-   and certificate metadata on a real web server.
+4. Edit **`${CUSTOMER}-kv/app/config`** (new version of `api_key`) and run the workflow
+   again. The summary shows the new KV version and SHA-256. "Change it once in
+   Vault and the pipeline picks it up."
 
 > The pipeline proves the live Vault pull in CI; it does not re-deploy
 > infrastructure. That keeps the demo fast and the story tight: secrets flow into
@@ -246,7 +245,7 @@ vault policy read ${CUSTOMER}-ci-kv
 vault policy read ${CUSTOMER}-ci-pki
 
 # 3. Reproduce the SHA-256 the run summary printed, proving the value
-vault kv get -field=api_key ci_${CUSTOMER}/github-actions/demo | tr -d '\n' | sha256sum
+vault kv get -field=api_key ${CUSTOMER}-kv/app/config | tr -d '\n' | sha256sum
 ```
 
 **Land it:** "The pipeline never held a long-lived secret. It logged in, got a

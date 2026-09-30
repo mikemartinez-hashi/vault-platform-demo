@@ -5,8 +5,7 @@
 #   demo_password         Act 1 userpass login for var.demo_username
 #   mysql_root_password   Act 4 MariaDB root password
 #
-# Optional but sensitive if you set them: db_master_password, sample_api_key,
-# ci_kv_secret_value.
+# Optional but sensitive if you set them: db_master_password, sample_api_key.
 #
 # Provider creds go in as ENVIRONMENT variables on the workspace, not here:
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY    (or a dynamic provider credential)

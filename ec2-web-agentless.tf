@@ -1,7 +1,7 @@
 # ===========================================================================
 # ACT 5 (infra) — Ubuntu + nginx, certificate rotated with no Vault Agent
 #
-# Reuses the same Ubuntu 24.04 AMI lookup as Act 3 (data.aws_ami.ubuntu_2404).
+# Reuses the same Ubuntu 24.04 AMI lookup as Act 7 (data.aws_ami.ubuntu_2404, locals.tf).
 # ===========================================================================
 
 resource "aws_security_group" "web_agentless" {

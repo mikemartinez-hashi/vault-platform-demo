@@ -6,7 +6,7 @@
 #
 #   Act 1  KV secrets            (vault-kv.tf)
 #   Act 2  Dynamic DB secrets    (vault-db.tf  -> RDS Postgres)
-#   Act 3  GitHub Actions + KV   (vault-ci.tf  + .github/workflows + ec2-ci-web.tf)
+#   Act 3  GitHub Actions + KV   (vault-ci.tf  + .github/workflows, no infra)
 #   Act 4  PKI + Vault Agent     (vault-pki.tf + ec2-mysql-agent.tf, Windows MariaDB)
 #   Act 5  PKI, agentless        (vault-pki-agentless.tf + ec2-web-agentless.tf,
 #                                 Ubuntu/nginx, systemd timer + curl)

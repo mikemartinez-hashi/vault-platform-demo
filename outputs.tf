@@ -32,11 +32,6 @@ output "db_creds_path" {
 }
 
 # ── Act 3 — GitHub Actions + KV ─────────────────────────────────────────────
-output "ci_web_url" {
-  description = "URL of the CI-injected web server (Act 3)."
-  value       = "http://${aws_instance.ci_web.public_dns}"
-}
-
 # Paste every key below into GitHub repo VARIABLES (Settings > Secrets and
 # variables > Actions > *Variables* tab). No repo secrets are needed.
 output "github_repo_variables" {
@@ -47,7 +42,7 @@ output "github_repo_variables" {
     VAULT_JWT_PATH       = vault_jwt_auth_backend.github.path
     VAULT_JWT_ROLE       = vault_jwt_auth_backend_role.ci.role_name
     VAULT_JWT_AUDIENCE   = local.ci_jwt_audience
-    VAULT_KV_PATH        = "${vault_mount.ci_kv.path}/data/${local.ci_kv_path}"
+    VAULT_KV_PATH        = "${vault_mount.kv.path}/data/${local.ci_kv_path}"
     VAULT_KV_KEY         = "api_key"
     VAULT_PKI_ISSUE_PATH = "${vault_mount.pki_int.path}/issue/${local.ci_pki_role}"
   }
@@ -81,11 +76,6 @@ output "mysql_public_dns" {
 output "ssm_connect_mysql" {
   description = "SSM Session Manager command for the Windows MariaDB instance."
   value       = "aws ssm start-session --target ${aws_instance.mysql.id} --region ${var.aws_region}"
-}
-
-output "ssm_connect_ci_web" {
-  description = "SSM Session Manager command for the CI web server."
-  value       = "aws ssm start-session --target ${aws_instance.ci_web.id} --region ${var.aws_region}"
 }
 
 output "pki_verify_hint" {

@@ -167,15 +167,8 @@ variable "db_cred_max_ttl_seconds" {
 }
 
 # =============================================================================
-# Act 3 — GitHub Actions + KV injection
+# Act 3 — GitHub Actions (OIDC). No secrets: Vault binds the role to these claims.
 # =============================================================================
-variable "ci_kv_secret_value" {
-  description = "Static secret value the GitHub Actions pipeline reads from KV and injects into the CI web server."
-  type        = string
-  default     = "ci-injected-not-a-real-key-5678"
-  # sensitive   = true
-}
-
 variable "github_owner" {
   description = "GitHub user/org that owns the demo repo. Part of the claim Vault binds the CI role to."
   type        = string
@@ -192,57 +185,6 @@ variable "github_branch" {
   description = "Branch allowed to authenticate to Vault. Must match the branch the workflow runs on."
   type        = string
   default     = "main"
-}
-
-variable "ci_web_instance_type" {
-  description = "EC2 instance type for the CI-injected Linux web server."
-  type        = string
-  default     = "t3.micro"
-}
-
-# GitHub Actions deployment provenance — populated by the workflow at run time,
-# baked into the CI web page to prove the deploy came from a specific run.
-variable "github_run_id" {
-  description = "GitHub Actions Run ID that triggered this deploy."
-  type        = string
-  default     = "local"
-}
-
-variable "github_sha" {
-  description = "Git commit SHA that was deployed."
-  type        = string
-  default     = "local"
-}
-
-variable "github_actor" {
-  description = "GitHub username that triggered the workflow."
-  type        = string
-  default     = "local"
-}
-
-variable "vault_ci_secret" {
-  description = "Static KV secret value retrieved by GitHub Actions and injected into the CI web server (overrides the applied value at pipeline time)."
-  type        = string
-  # sensitive   = true
-  default = "local-dev-secret-value"
-}
-
-variable "vault_ci_cert_common_name" {
-  description = "Common name of the dynamic PKI cert the CI pipeline issued (displayed as proof)."
-  type        = string
-  default     = "local.ci.demo.internal"
-}
-
-variable "vault_ci_cert_serial" {
-  description = "Serial number of the dynamic CI PKI cert."
-  type        = string
-  default     = "00:00:00:local"
-}
-
-variable "vault_ci_cert_expiration" {
-  description = "Expiry (UTC) of the dynamic CI PKI cert."
-  type        = string
-  default     = "n/a"
 }
 
 # =============================================================================

@@ -10,7 +10,7 @@ customizable per account with a single `customer_name` variable.
 |-----|-------|-----------|
 | 1 | "Your password manager, but better" | KV-v2 + userpass + least-privilege policy |
 | 2 | The differentiator: dynamic secrets | Database engine → RDS Postgres |
-| 3 | Secrets in your pipeline | GitHub Actions authenticates with **OIDC (no stored secret)**, pulls a **KV** secret and issues a PKI cert |
+| 3 | Secrets in your pipeline | GitHub Actions authenticates with **OIDC (no stored secret)**, pulls the Act 1 **KV** secret and issues a PKI cert |
 | 4 | Certificate lifecycle, automated | Root→Intermediate **PKI** + **Vault Agent** on Windows MariaDB — cert/key rendered as plain files, `FLUSH SSL` in place |
 | 5 | Same PKI, **no agent** | Ubuntu + nginx — a `curl`/`jq` script on a **systemd timer** issues off the same intermediate and reloads nginx in place |
 | 6 | Certs from a **real public CA** *(optional)* | `pki-external-ca` engine — Vault holds the ACME account and fulfills DNS-01 in Route53; same agentless script shape, different trust root |
@@ -41,7 +41,7 @@ outputs.tf              paths, URLs, and the exact GitHub repo secrets/variables
 vault-kv.tf             Act 1 — KV + userpass + policy
 vault-db.tf             Act 2 — RDS Postgres + database secrets engine
 vault-pki.tf            Act 4 (config) — Root→Intermediate CA, leaf roles, agent AppRole
-vault-ci.tf             Act 3 (config) — GitHub OIDC (JWT) auth, CI KV secret, CI policies
+vault-ci.tf             Act 3 (config) — GitHub OIDC (JWT) auth + CI policies (reads the Act 1 KV secret)
 vault-pki-agentless.tf  Act 5 (config) — nginx PKI role + narrow AppRole/policy (no agent)
 vault-pki-external-ca.tf Act 6 (config) — pki-external-ca mount, ACME account, Route53 DNS-01, role
 iam-route53-acme.tf     Act 6 (infra)  — scoped IAM user for Vault's DNS-01 + the A record
@@ -51,12 +51,10 @@ ec2-ssh-ca.tf           Act 7 (infra)  — key-less Ubuntu target that trusts th
 vault-ldap.tf           Act 8 (config) — LDAP engine, static roles, consumer/operator policies
 ec2-ldap-ad.tf          Act 8 (infra)  — Windows AD domain controller, EIP, 15-min bootstrap wait
 
-ec2-ci-web.tf           Act 3 (infra) — Linux/Apache web server (CI-injected page)
 ec2-mysql-agent.tf      Act 4 (infra) — Windows MariaDB + Vault Agent
 ec2-web-agentless.tf    Act 5 (infra) — Ubuntu/nginx, cert rotated by a systemd timer
 
 templates/
-  ci_web_userdata.sh.tpl            CI web page (KV + PKI values baked at pipeline time)
   windows_mysql_userdata.ps1.tpl    Windows: Vault + MariaDB + agent bootstrap
   vault-agent/agent-windows.hcl.tpl Vault Agent config (templates + FLUSH SSL hook)
   agentless_web_userdata.sh.tpl     Ubuntu: nginx + rotation script + systemd timer
@@ -147,6 +145,10 @@ Vault only accepts tokens minted for `<github_owner>/<github_repo>` on
 `github_branch` (defaults: `mikemartinez-hashi/vault-platform-demo`, `main`) —
 override those workspace variables if your repo differs. `ci_bound_claims` and
 `ci_verify_command` print the binding for the demo.
+
+The pipeline reads the **same** secret Act 1 stores (`<customer>-kv/app/config`,
+key `api_key`), so editing it live in Act 1 is what the next run picks up. There is
+no separate CI mount and no CI web server.
 
 One workflow, `vault-inject.yml`, runs on every push to `main` (or **Run
 workflow**). It does not run Terraform or touch infrastructure; the proof is in

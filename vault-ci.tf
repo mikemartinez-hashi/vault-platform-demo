@@ -3,39 +3,22 @@
 # GitHub mints a signed OIDC token per workflow run; Vault validates it against
 # GitHub's issuer and checks the repository + branch claims bound on the role.
 # Nothing Vault-related lives in the repo (no token, role_id or secret_id).
-# One login lets the pipeline both (a) read a static KV secret and (b) issue a
+# One login lets the pipeline both (a) read the Act 1 KV secret and (b) issue a
 # fresh short-lived PKI cert off Act 4's intermediate.
 #
 # The workflow (.github/workflows/vault-inject.yml) reads every path from GitHub
 # repo *variables*; `github_repo_variables` (outputs.tf) prints the full set.
 # ===========================================================================
 
-# Dedicated KV mount for the CI secret (avoids collision with HCP's "secret/").
-resource "vault_mount" "ci_kv" {
-  path        = local.ci_kv_mount
-  type        = "kv-v2"
-  description = "KV store the GitHub Actions pipeline reads from (${var.customer_name})"
-  options     = { version = "2" }
-}
-
-resource "vault_kv_secret_v2" "ci_secret" {
-  mount = vault_mount.ci_kv.path
-  name  = local.ci_kv_path
-
-  data_json = jsonencode({
-    api_key = var.ci_kv_secret_value
-  })
-}
-
-# Policy: read the CI KV secret.
+# Policy: read the Act 1 KV secret (and its metadata, for the run summary).
 resource "vault_policy" "ci_kv" {
   name   = local.ci_kv_policy
   policy = <<-EOT
-    path "${vault_mount.ci_kv.path}/data/${local.ci_kv_path}" {
+    path "${vault_mount.kv.path}/data/${local.ci_kv_path}" {
       capabilities = ["read"]
     }
     # Lets the pipeline report which KV version it read (shown in the run summary).
-    path "${vault_mount.ci_kv.path}/metadata/${local.ci_kv_path}" {
+    path "${vault_mount.kv.path}/metadata/${local.ci_kv_path}" {
       capabilities = ["read"]
     }
   EOT
