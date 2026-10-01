@@ -15,6 +15,10 @@ $NetbiosName   = "${ldap_netbios_name}"
 $PhaseFile = "C:\ldap-bootstrap-phase.txt"
 $LogFile   = "C:\ldap-bootstrap.log"
 
+# Full transcript across all boots: cmdlet errors (e.g. from Install-ADDSForest)
+# do NOT reach Write-Log, so this is where a failed promotion shows up.
+Start-Transcript -Path "C:\ldap-bootstrap-transcript.log" -Append | Out-Null
+
 function Write-Log {
     param([string]$Msg)
     $Line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Msg"
@@ -35,25 +39,43 @@ Write-Log "============================================================"
 # PHASE 1 - Install AD DS and trigger domain creation (reboots)
 # ============================================================
 if ($Phase -eq "1") {
-    Write-Log "Phase 1: Installing AD-Domain-Services and DNS roles..."
-    Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools -NoRestart
+    try {
+        Write-Log "Phase 1: Installing AD-Domain-Services and DNS roles..."
+        $Feat = Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools -NoRestart
+        if (-not $Feat.Success) { throw "Install-WindowsFeature did not succeed: $($Feat.ExitCode)" }
 
-    # Write phase marker BEFORE the reboot so Phase 2 runs after restart
-    Set-Content -Path $PhaseFile -Value "2"
-    Write-Log "Phase marker written. Configuring forest and rebooting..."
+        $SafePwd = ConvertTo-SecureString $LdapAdminPass -AsPlainText -Force
 
-    $SafePwd = ConvertTo-SecureString $LdapAdminPass -AsPlainText -Force
+        # Vault binds as CN=Administrator with this password. Promoting a server
+        # carries the LOCAL Administrator's existing password into the domain, so
+        # set it first. Look the account up by its well-known SID (-500) in case
+        # the image renamed it.
+        $Admin = Get-LocalUser | Where-Object { $_.SID.Value -like "*-500" }
+        Set-LocalUser -Name $Admin.Name -Password $SafePwd
+        Enable-LocalUser -Name $Admin.Name
+        Write-Log "Built-in administrator account is '$($Admin.Name)'; password set to the demo value."
 
-    Import-Module ADDSDeployment
-    Install-ADDSForest `
-        -DomainName            $LdapDomain `
-        -DomainNetbiosName     $NetbiosName `
-        -SafeModeAdministratorPassword $SafePwd `
-        -InstallDns:$true `
-        -NoRebootOnCompletion:$false `
-        -Force:$true
+        # Phase marker BEFORE the reboot so Phase 2 runs after restart
+        Set-Content -Path $PhaseFile -Value "2"
+        Write-Log "Phase marker written. Configuring forest and rebooting..."
 
-    # System reboots here - nothing below runs on this boot
+        Import-Module ADDSDeployment
+        Install-ADDSForest `
+            -DomainName            $LdapDomain `
+            -DomainNetbiosName     $NetbiosName `
+            -SafeModeAdministratorPassword $SafePwd `
+            -InstallDns:$true `
+            -NoRebootOnCompletion:$false `
+            -Force:$true `
+            -ErrorAction Stop
+
+        # System reboots here - nothing below runs on this boot
+    } catch {
+        # Without this, a failed promotion leaves the box idle with no reboot and
+        # no explanation.
+        Write-Log "PHASE 1 FAILED: $_"
+        Set-Content -Path $PhaseFile -Value "failed-phase1"
+    }
 }
 
 # ============================================================

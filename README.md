@@ -277,7 +277,7 @@ Before enabling: set `ldap_admin_password` (12+ chars, sensitive), and make sure
 `ldap_allowed_cidrs` (defaults to `db_allowed_cidrs`) includes the **HCP Vault
 egress IP**, or the engine mount fails its connection check. The bootstrap is a
 three-phase, two-reboot script; Terraform waits 900s before configuring Vault, so
-the apply takes ~15+ minutes. Bootstrap log: `C:\ldap-bootstrap.log` (via SSM).
+the apply takes ~15+ minutes. Logs (via SSM): `C:\ldap-bootstrap.log` (progress) and `C:\ldap-bootstrap-transcript.log` (full cmdlet output, where a failed promotion shows up). `scripts/ldap/diagnose-host.sh` prints both, plus whether AD and LDAPS are listening.
 Demo shortcut: `insecure_tls = true` skips verifying the DC's self-signed cert.
 
 ## Cleanup

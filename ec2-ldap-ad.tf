@@ -97,5 +97,5 @@ resource "aws_eip" "ldap" {
 resource "time_sleep" "wait_for_ldap_bootstrap" {
   count           = local.act8 ? 1 : 0
   depends_on      = [aws_eip.ldap]
-  create_duration = "900s"
+  create_duration = var.ldap_bootstrap_wait
 }

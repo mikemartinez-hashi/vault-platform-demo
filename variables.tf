@@ -442,6 +442,12 @@ variable "ldap_instance_type" {
   default     = "t3.large"
 }
 
+variable "ldap_bootstrap_wait" {
+  description = "How long Terraform waits after the DC launches before configuring Vault's LDAP engine (the bootstrap is three phases and two reboots). Raise it on smaller instance types."
+  type        = string
+  default     = "900s"
+}
+
 variable "ldap_domain" {
   description = "AD domain to create, e.g. example.com."
   type        = string
